@@ -1,0 +1,8 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/CMakeParseArguments.cmake
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/FindPackageHandleStandardArgs.cmake
+C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/share/cmake-3.31/Modules/FindPackageMessage.cmake
+D:/flutter_apps/utilities/utility_tools/build/windows/x64/pdfium-src/PDFiumConfig.cmake
+D:/flutter_apps/utilities/utility_tools/windows/flutter/ephemeral/.plugin_symlinks/printing/windows/CMakeLists.txt
+D:/flutter_apps/utilities/utility_tools/windows/flutter/ephemeral/.plugin_symlinks/printing/windows/DownloadProject.CMakeLists.cmake.in
+D:/flutter_apps/utilities/utility_tools/windows/flutter/ephemeral/.plugin_symlinks/printing/windows/DownloadProject.cmake

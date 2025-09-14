@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\x64\Release\ZERO_CHECK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\flutter\x64\Release\flutter_assemble</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\plugins\pasteboard\Release\pasteboard_plugin.dll</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\plugins\printing\Release\printing_plugin.dll</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\plugins\screen_retriever_windows\Release\screen_retriever_windows_plugin.dll</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\plugins\share_plus\Release\share_plus_plugin.dll</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\plugins\url_launcher_windows\Release\url_launcher_windows_plugin.dll</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\plugins\window_manager\Release\window_manager_plugin.dll</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\runner\Release\utility_tools.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>D:\flutter_apps\utilities\utility_tools\build\windows\x64\x64\Release\ALL_BUILD</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>
