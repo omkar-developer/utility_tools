@@ -212,12 +212,29 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WindowListener {
+  bool _isSidebarCollapsed = false;
+
   @override
   void initState() {
     super.initState();
     // Only add window listener on desktop platforms
     if (!kIsWeb) {
       windowManager.addListener(this);
+    }
+    // Initialize sidebar state based on screen size for web
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkInitialSidebarState();
+      });
+    }
+  }
+
+  void _checkInitialSidebarState() {
+    if (mounted) {
+      final screenWidth = MediaQuery.of(context).size.width;
+      setState(() {
+        _isSidebarCollapsed = screenWidth < 1024; // Collapse on mobile
+      });
     }
   }
 
@@ -239,14 +256,237 @@ class _HomePageState extends State<HomePage> with WindowListener {
     }
   }
 
+  void _toggleSidebar() {
+    setState(() {
+      _isSidebarCollapsed = !_isSidebarCollapsed;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Use different layouts for web and desktop
+    if (kIsWeb) {
+      return _buildWebLayout();
+    } else {
+      return _buildDesktopLayout();
+    }
+  }
+
+  Widget _buildWebLayout() {
+    return Scaffold(
+      body: Row(
+        children: [
+          // Sidebar
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: _isSidebarCollapsed ? 61 : 180,
+            child: _buildSidebar(),
+          ),
+          // Main content
+          Expanded(
+            child: Column(
+              children: [
+                // Minimal top bar for web
+                _buildWebTopBar(),
+                // Main content
+                const Expanded(child: Home()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: _buildCustomAppBar(context),
       ),
       body: const Home(),
+    );
+  }
+
+  Widget _buildWebTopBar() {
+    // This method is no longer used in the web layout
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          right: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withAlpha(40),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          _buildSidebarItem(
+            icon: _isSidebarCollapsed ? Icons.menu : Icons.keyboard_arrow_left,
+            label: 'Utility Tools',
+            onTap: _toggleSidebar,
+          ),
+          // App branding
+          const Divider(height: 1),
+
+          // Navigation items
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                _buildSidebarItem(
+                  icon: Icons.home,
+                  label: 'Home',
+                  onTap: () {
+                    // Navigate to home or refresh
+                  },
+                  isSelected: true,
+                ),
+                _buildSidebarItem(
+                  icon: Icons.library_books,
+                  label: 'Tools Library',
+                  onTap: () => JsScriptLibraryHelper.showLibraryDialog(
+                    context,
+                    callback: () => JSChangeNotifier.instance.reloadTools(),
+                  ),
+                ),
+
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Divider(height: 1),
+                ),
+
+                // Quick actions section
+                if (!_isSidebarCollapsed) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      'Quick Actions',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+
+                _buildSidebarItem(
+                  icon: Icons.fullscreen,
+                  label: 'Fullscreen',
+                  onTap: _toggleFullscreen,
+                ),
+                _buildSidebarItem(
+                  icon: Icons.refresh,
+                  label: 'Refresh',
+                  onTap: _refreshPage,
+                ),
+                _buildSidebarItem(
+                  icon: Icons.share,
+                  label: 'Share',
+                  onTap: _shareApp,
+                ),
+              ],
+            ),
+          ),
+
+          // Footer with theme toggle and collapse button
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              _buildSidebarItem(
+                icon: Icons.settings,
+                label: 'Settings',
+                onTap: _showGlobalSettingsDialog,
+              ),
+              _buildSidebarItem(
+                icon: Theme.of(context).brightness == Brightness.dark
+                    ? Icons.light_mode
+                    : Icons.dark_mode,
+                label: 'Toggle theme',
+                onTap: () {
+                  final newTheme =
+                      Theme.of(context).brightness == Brightness.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark;
+                  MyApp.of(context)?.updateTheme(newTheme);
+                  AppSettings.themeMode = newTheme;
+                },
+              ),
+              _buildSidebarItem(
+                icon: Icons.info_outline,
+                label: 'About',
+                onTap: () => _showAboutDialog(context),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool isSelected = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: isSelected
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: Tooltip(
+          message: _isSidebarCollapsed ? label : '',
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.onPrimaryContainer
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  if (!_isSidebarCollapsed) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.onPrimaryContainer
+                              : Theme.of(context).colorScheme.onSurface,
+                          fontWeight: isSelected
+                              ? FontWeight.w500
+                              : FontWeight.normal,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -282,14 +522,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
                 alignment: Alignment.centerLeft,
                 child: Row(
                   children: [
-                    // Use different icon source for web vs desktop
-                    kIsWeb
-                        ? Icon(
-                            Icons.build_circle,
-                            size: 24,
-                            color: Theme.of(context).colorScheme.primary,
-                          )
-                        : Image.asset("assets/icons/icon.png", height: 24),
+                    Image.asset("assets/icons/icon.png", height: 24),
                     const SizedBox(width: 12),
                     Text(
                       'Utility Tools',
@@ -297,30 +530,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    // Add web badge for web version
-                    if (kIsWeb) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'WEB',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -349,8 +558,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
           ),
           // Custom window controls (desktop only)
           if (isDesktop) _buildWindowControls(context),
-          // Web-specific menu button
-          if (kIsWeb) _buildWebMenu(context),
           const SizedBox(width: 8),
         ],
       ),
@@ -388,57 +595,9 @@ class _HomePageState extends State<HomePage> with WindowListener {
     );
   }
 
-  Widget _buildWebMenu(BuildContext context) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert),
-      tooltip: 'More options',
-      onSelected: (value) {
-        switch (value) {
-          case 'fullscreen':
-            _toggleFullscreen();
-            break;
-          case 'refresh':
-            _refreshPage();
-            break;
-          case 'share':
-            _shareApp();
-            break;
-        }
-      },
-      itemBuilder: (BuildContext context) => [
-        const PopupMenuItem<String>(
-          value: 'fullscreen',
-          child: ListTile(
-            leading: Icon(Icons.fullscreen),
-            title: Text('Toggle Fullscreen'),
-            dense: true,
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'refresh',
-          child: ListTile(
-            leading: Icon(Icons.refresh),
-            title: Text('Refresh'),
-            dense: true,
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'share',
-          child: ListTile(
-            leading: Icon(Icons.share),
-            title: Text('Share App'),
-            dense: true,
-          ),
-        ),
-      ],
-    );
-  }
-
   void _toggleFullscreen() {
     // Web fullscreen functionality
     try {
-      // This would require dart:html for web-specific APIs
-      // For now, show a snackbar indicating the feature
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Press F11 to toggle fullscreen in your browser'),
@@ -453,8 +612,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
   void _refreshPage() {
     // Web refresh functionality
     try {
-      // This would require dart:html for window.location.reload()
-      // For now, show a snackbar
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Press Ctrl+R or F5 to refresh the page'),
@@ -469,7 +626,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
   void _shareApp() {
     // Web share functionality
     try {
-      // This would use Navigator.share() API or copy URL to clipboard
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Copy the current URL to share this app'),
@@ -710,14 +866,12 @@ class _HomePageState extends State<HomePage> with WindowListener {
     showAboutDialog(
       context: context,
       applicationName: 'Utility Tools',
-      applicationVersion: '1.0.0',
-      applicationIcon: kIsWeb
-          ? Icon(
-              Icons.build_circle,
-              size: 64,
-              color: Theme.of(context).colorScheme.primary,
-            )
-          : Image.asset("assets/icons/icon.png", width: 64, height: 64),
+      applicationVersion: '1.2.0',
+      applicationIcon: Image.asset(
+        "assets/icons/icon.png",
+        width: 64,
+        height: 64,
+      ),
       children: [
         const SizedBox(height: 16),
         const Text(

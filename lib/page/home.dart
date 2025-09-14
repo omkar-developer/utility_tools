@@ -66,6 +66,8 @@ class _HomeState extends State<Home> {
 
   bool showSettings = true;
 
+  int _rebuildId = 0;
+
   void appendCategories(Map<String, List<Tool Function()>> categories) {
     for (final category in categories.entries) {
       toolCategories.putIfAbsent(category.key, () => []);
@@ -205,6 +207,7 @@ class _HomeState extends State<Home> {
       currentStatus = ToolStatus.success;
       showSettings = tool.allowEmptyInput;
       if (tool.allowEmptyInput) inputController.text = '';
+      _rebuildId++;
     });
 
     if (chainModeEnabled) return;
@@ -1105,6 +1108,7 @@ class _HomeState extends State<Home> {
             child: SizedBox(
               width: 500,
               child: SettingsEditor(
+                key: ValueKey(_rebuildId),
                 settings: Map<String, dynamic>.from(selectedTool!.settings),
                 showApplyButton: false,
                 settingsHints: selectedTool?.settingsHints,

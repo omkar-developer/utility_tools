@@ -86,7 +86,7 @@ class _JsScriptLibraryDialogState extends State<JsScriptLibraryDialog> {
                 const Icon(Icons.library_books, size: 24),
                 const SizedBox(width: 8),
                 const Text(
-                  'JavaScript Script Library',
+                  'JavaScript Tools Library',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),

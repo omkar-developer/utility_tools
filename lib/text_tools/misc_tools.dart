@@ -1905,13 +1905,1635 @@ data:image/png;base64,$resultBase64
   }
 }
 
+class PwaIconTool extends Tool {
+  PwaIconTool()
+    : super(
+        name: 'PWA Icon Generator',
+        description: 'Generate standard + maskable icons for Flutter Web PWAs',
+        icon: Icons.android,
+        allowEmptyInput: false,
+        isOutputMarkdown: true,
+        settings: {
+          'sizes': '192,512', // text input, parse later
+          'generate_maskable': true,
+          'maskable_padding': 0.2, // 20% safe area
+          'maskable_bg': 'transparent', // black | white | transparent
+        },
+        settingsHints: {
+          'sizes': {
+            'type': 'text',
+            'label': 'Icon Sizes',
+            'help': 'Comma-separated list of sizes (e.g. 192,512)',
+          },
+          'generate_maskable': {
+            'type': 'bool',
+            'label': 'Generate Maskable Icon',
+          },
+          'maskable_padding': {
+            'type': 'slider',
+            'label': 'Maskable Padding',
+            'min': 0.0,
+            'max': 0.5,
+            'divisions': 10,
+            'help': 'Extra safe area around logo (as % of size)',
+          },
+          'maskable_bg': {
+            'type': 'dropdown',
+            'label': 'Maskable Background',
+            'options': ['transparent', 'black', 'white'],
+            'help': 'Background color for maskable padding',
+          },
+        },
+      );
+
+  @override
+  Future<ToolResult> execute(String input) async {
+    try {
+      final bytes = base64Decode(input.split(',').last);
+      img.Image? image = img.decodeImage(bytes);
+      if (image == null) {
+        return ToolResult(
+          output: 'Error: Invalid image input',
+          status: 'error',
+        );
+      }
+
+      // Parse sizes
+      final sizeText = settings['sizes'] as String;
+      final sizes = sizeText
+          .split(',')
+          .map((s) => int.tryParse(s.trim()))
+          .where((v) => v != null && v > 0)
+          .map((v) => v!)
+          .toList();
+
+      final generateMaskable = settings['generate_maskable'] == true;
+      final maskablePadding = settings['maskable_padding'] as double;
+      final bgChoice = settings['maskable_bg'] as String;
+
+      // Background color
+      img.Color bgColor;
+      switch (bgChoice) {
+        case 'black':
+          bgColor = img.ColorRgba8(0, 0, 0, 255);
+          break;
+        case 'white':
+          bgColor = img.ColorRgba8(255, 255, 255, 255);
+          break;
+        default: // transparent
+          bgColor = img.ColorRgba8(0, 0, 0, 0);
+      }
+
+      final outputs = <String, String>{};
+
+      for (final size in sizes) {
+        // Standard icon
+        final resized = img.copyResize(
+          image,
+          width: size,
+          height: size,
+          interpolation: img.Interpolation.cubic,
+        );
+        final out = base64Encode(img.encodePng(resized));
+        outputs['Icon-$size.png'] = out;
+
+        // Maskable icon
+        if (generateMaskable) {
+          final paddedSize = (size * (1 - maskablePadding)).toInt();
+          final base = img.Image(width: size, height: size);
+          img.fill(base, color: bgColor);
+
+          final resizedMask = img.copyResize(
+            image,
+            width: paddedSize,
+            height: paddedSize,
+            interpolation: img.Interpolation.cubic,
+          );
+          final dx = (size - resizedMask.width) ~/ 2;
+          final dy = (size - resizedMask.height) ~/ 2;
+          img.compositeImage(base, resizedMask, dstX: dx, dstY: dy);
+
+          final outMask = base64Encode(img.encodePng(base));
+          outputs['Icon-maskable-$size.png'] = outMask;
+        }
+      }
+
+      // Markdown output
+      final md = StringBuffer()
+        ..writeln('# 📱 PWA Icons Generated\n')
+        ..writeln('## Manifest Snippet\n')
+        ..writeln('```json')
+        ..writeln('"icons": [');
+      for (final entry in outputs.entries) {
+        final match = RegExp(r'(\d+)').firstMatch(entry.key);
+        final size = match != null ? '${match.group(1)}x${match.group(1)}' : '';
+        final purpose = entry.key.contains('maskable')
+            ? ', "purpose": "maskable"'
+            : '';
+        md.writeln(
+          '  { "src": "icons/${entry.key}", "sizes": "$size", "type": "image/png"$purpose },',
+        );
+      }
+      md.writeln(']');
+      md.writeln('```');
+
+      // Previews
+      md.writeln('\n## Output Icons');
+      outputs.forEach((name, b64) {
+        md.writeln('\n**$name**');
+        md.writeln('```png\ndata:image/png;base64,$b64\n```');
+      });
+
+      return ToolResult(output: md.toString(), status: 'success');
+    } catch (e) {
+      return ToolResult(output: 'Error: $e', status: 'error');
+    }
+  }
+}
+
+class NinePatchDecoratorTool extends Tool {
+  NinePatchDecoratorTool()
+    : super(
+        name: '9-Patch UI Decorator',
+        description:
+            'Generate 9-patch PNG images for Flutter UI components with perfect scaling',
+        icon: Icons.crop_free,
+        allowEmptyInput: true,
+        isOutputMarkdown: true,
+        settings: {
+          // Preset selection
+          'preset': 'button',
+
+          // Size settings
+          'width': 120,
+          'height': 40,
+          'corner_radius': 8,
+          'border_width': 2,
+
+          // Color settings
+          'primary_color': '#3498db',
+          'use_gradient': true,
+          'gradient_direction': 'vertical', // vertical, horizontal, diagonal
+          'auto_palette': true,
+          'secondary_color': '#2980b9',
+
+          // Style settings
+          'style': 'raised', // flat, raised, inset, outlined, glass
+          'shadow_enabled': true,
+          'shadow_blur': 4,
+          'shadow_offset_x': 0,
+          'shadow_offset_y': 2,
+          'shadow_opacity': 0.3,
+
+          // 9-patch stretch areas (from edges)
+          'stretch_left': 30,
+          'stretch_right': 30,
+          'stretch_top': 15,
+          'stretch_bottom': 15,
+
+          // Content padding (from edges)
+          'content_left': 10,
+          'content_right': 10,
+          'content_top': 8,
+          'content_bottom': 8,
+
+          // Advanced effects
+          'inner_glow': false,
+          'border_glow': false,
+          'texture_overlay': false,
+        },
+        settingsHints: {
+          'preset': {
+            'type': 'dropdown',
+            'label': 'Preset Style',
+            'options': [
+              'button',
+              'panel',
+              'progress_bar',
+              'progress_track',
+              'input_field',
+              'card',
+              'dialog',
+              'toast',
+              'badge',
+              'chip',
+              'tab',
+              'slider_thumb',
+              'switch_track',
+            ],
+            'help': 'Quick preset configurations for common UI elements',
+          },
+          'width': {
+            'type': 'spinner',
+            'label': 'Width (px)',
+            'min': 20,
+            'max': 400,
+            'step': 10,
+            'decimal': false,
+          },
+          'height': {
+            'type': 'spinner',
+            'label': 'Height (px)',
+            'min': 10,
+            'max': 300,
+            'step': 5,
+            'decimal': false,
+          },
+          'corner_radius': {
+            'type': 'slider',
+            'label': 'Corner Radius',
+            'min': 0,
+            'max': 50,
+            'divisions': 50,
+            'show_range': false,
+          },
+          'border_width': {
+            'type': 'slider',
+            'label': 'Border Width',
+            'min': 0,
+            'max': 10,
+            'divisions': 10,
+            'show_range': false,
+          },
+          'primary_color': {
+            'type': 'color',
+            'label': 'Primary Color',
+            'alpha': true,
+            'presets': true,
+            'help': 'Main color for the decorator',
+          },
+          'secondary_color': {
+            'type': 'color',
+            'label': 'Secondary Color',
+            'alpha': true,
+            'presets': true,
+            'help': 'Used for gradients and effects',
+          },
+          'use_gradient': {
+            'type': 'bool',
+            'label': 'Use Gradient',
+            'help': 'Apply gradient between primary and secondary colors',
+          },
+          'gradient_direction': {
+            'type': 'dropdown',
+            'label': 'Gradient Direction',
+            'options': ['vertical', 'horizontal', 'diagonal'],
+          },
+          'auto_palette': {
+            'type': 'bool',
+            'label': 'Auto Generate Palette',
+            'help': 'Automatically generate secondary color from primary',
+          },
+          'style': {
+            'type': 'dropdown',
+            'label': 'Visual Style',
+            'options': ['flat', 'raised', 'inset', 'outlined', 'glass'],
+            'help': 'Overall visual appearance',
+          },
+          'shadow_enabled': {'type': 'bool', 'label': 'Drop Shadow'},
+          'shadow_blur': {
+            'type': 'slider',
+            'label': 'Shadow Blur',
+            'min': 0,
+            'max': 20,
+            'divisions': 20,
+            'show_range': false,
+          },
+          'shadow_offset_x': {
+            'type': 'slider',
+            'label': 'Shadow X Offset',
+            'min': -10,
+            'max': 10,
+            'divisions': 20,
+            'show_range': false,
+          },
+          'shadow_offset_y': {
+            'type': 'slider',
+            'label': 'Shadow Y Offset',
+            'min': -10,
+            'max': 10,
+            'divisions': 20,
+            'show_range': false,
+          },
+          'shadow_opacity': {
+            'type': 'slider',
+            'label': 'Shadow Opacity',
+            'min': 0.0,
+            'max': 1.0,
+            'divisions': 10,
+            'show_range': false,
+          },
+          'stretch_left': {
+            'type': 'spinner',
+            'label': 'Stretch Left Edge',
+            'min': 5,
+            'max': 100,
+            'step': 5,
+            'help': 'Distance from left edge where stretching starts',
+          },
+          'stretch_right': {
+            'type': 'spinner',
+            'label': 'Stretch Right Edge',
+            'min': 5,
+            'max': 100,
+            'step': 5,
+            'help': 'Distance from right edge where stretching starts',
+          },
+          'stretch_top': {
+            'type': 'spinner',
+            'label': 'Stretch Top Edge',
+            'min': 5,
+            'max': 50,
+            'step': 5,
+            'help': 'Distance from top edge where stretching starts',
+          },
+          'stretch_bottom': {
+            'type': 'spinner',
+            'label': 'Stretch Bottom Edge',
+            'min': 5,
+            'max': 50,
+            'step': 5,
+            'help': 'Distance from bottom edge where stretching starts',
+          },
+          'content_left': {
+            'type': 'spinner',
+            'label': 'Content Padding Left',
+            'min': 0,
+            'max': 50,
+            'step': 2,
+          },
+          'content_right': {
+            'type': 'spinner',
+            'label': 'Content Padding Right',
+            'min': 0,
+            'max': 50,
+            'step': 2,
+          },
+          'content_top': {
+            'type': 'spinner',
+            'label': 'Content Padding Top',
+            'min': 0,
+            'max': 30,
+            'step': 2,
+          },
+          'content_bottom': {
+            'type': 'spinner',
+            'label': 'Content Padding Bottom',
+            'min': 0,
+            'max': 30,
+            'step': 2,
+          },
+          'inner_glow': {
+            'type': 'bool',
+            'label': 'Inner Glow Effect',
+            'help': 'Add subtle inner highlight',
+          },
+          'border_glow': {
+            'type': 'bool',
+            'label': 'Border Glow',
+            'help': 'Add glow around border',
+          },
+          'texture_overlay': {
+            'type': 'bool',
+            'label': 'Texture Overlay',
+            'help': 'Add subtle texture pattern',
+          },
+        },
+      );
+
+  @override
+  Future<ToolResult> execute(String input) async {
+    try {
+      // Apply preset settings
+      _applyPreset();
+
+      // Auto-generate secondary color if enabled
+      if (settings['auto_palette'] == true) {
+        settings['secondary_color'] = _generateSecondaryColor(
+          settings['primary_color'] as String,
+        );
+      }
+
+      final width = settings['width'] as int;
+      final height = settings['height'] as int;
+
+      // Generate the 9-patch PNG
+      final pngData = _generate9PatchPNG();
+      final base64Data = base64Encode(pngData);
+
+      // Build output
+      final md = StringBuffer();
+      md.writeln('# 🎨 9-Patch UI Decorator Generated\n');
+
+      // Show current settings summary
+      md.writeln('## ⚙️ Current Settings\n');
+      md.writeln('- **Size**: ${width}x${height}px');
+      md.writeln('- **Style**: ${settings['style']}');
+      md.writeln(
+        '- **Colors**: ${settings['primary_color']} → ${settings['secondary_color']}',
+      );
+      md.writeln('- **Corner Radius**: ${settings['corner_radius']}px');
+      md.writeln('- **Border**: ${settings['border_width']}px');
+      md.writeln(
+        '- **Gradient**: ${settings['use_gradient'] ? 'Yes (${settings['gradient_direction']})' : 'No'}',
+      );
+      md.writeln('- **Shadow**: ${settings['shadow_enabled'] ? 'Yes' : 'No'}');
+      md.writeln(
+        '- **Stretch Areas**: L:${settings['stretch_left']}, R:${settings['stretch_right']}, T:${settings['stretch_top']}, B:${settings['stretch_bottom']}',
+      );
+      md.writeln(
+        '- **Content Padding**: L:${settings['content_left']}, R:${settings['content_right']}, T:${settings['content_top']}, B:${settings['content_bottom']}\n',
+      );
+
+      // Show Flutter implementation
+      md.writeln('## 📱 Flutter Usage\n');
+      md.writeln('```dart');
+      md.writeln(_generateFlutterCode());
+      md.writeln('```\n');
+
+      // Show the generated 9-patch image
+      md.writeln('## 🖼️ Generated 9-Patch PNG\n');
+      md.writeln('**9patch_${settings['preset']}.9.png**\n');
+      md.writeln('```png\ndata:image/png;base64,$base64Data\n```\n');
+
+      // Usage instructions
+      md.writeln(_getUsageInstructions());
+
+      return ToolResult(output: md.toString(), status: 'success');
+    } catch (e, stackTrace) {
+      return ToolResult(
+        output: 'Error generating 9-patch: $e\n\nStack trace: $stackTrace',
+        status: 'error',
+      );
+    }
+  }
+
+  void _applyPreset() {
+    final preset = settings['preset'] as String;
+
+    switch (preset) {
+      case 'button':
+        settings.addAll({
+          'width': 120,
+          'height': 40,
+          'corner_radius': 8,
+          'border_width': 0,
+          'style': 'raised',
+          'use_gradient': true,
+          'shadow_enabled': true,
+          'primary_color': '#3498db',
+          'gradient_direction': 'vertical',
+          'stretch_left': 30,
+          'stretch_right': 30,
+          'stretch_top': 15,
+          'stretch_bottom': 15,
+          'content_left': 12,
+          'content_right': 12,
+          'content_top': 8,
+          'content_bottom': 8,
+          'shadow_blur': 4,
+          'shadow_offset_y': 2,
+          'inner_glow': true,
+        });
+        break;
+
+      case 'panel':
+        settings.addAll({
+          'width': 200,
+          'height': 120,
+          'corner_radius': 12,
+          'border_width': 1,
+          'style': 'flat',
+          'use_gradient': false,
+          'shadow_enabled': true,
+          'primary_color': '#ecf0f1',
+          'gradient_direction': 'vertical',
+          'stretch_left': 50,
+          'stretch_right': 50,
+          'stretch_top': 30,
+          'stretch_bottom': 30,
+          'content_left': 16,
+          'content_right': 16,
+          'content_top': 16,
+          'content_bottom': 16,
+          'shadow_blur': 6,
+          'shadow_offset_y': 3,
+          'shadow_opacity': 0.1,
+        });
+        break;
+
+      case 'progress_bar':
+        settings.addAll({
+          'width': 200,
+          'height': 8,
+          'corner_radius': 4,
+          'border_width': 0,
+          'style': 'raised',
+          'use_gradient': true,
+          'shadow_enabled': false,
+          'primary_color': '#27ae60',
+          'gradient_direction': 'vertical',
+          'stretch_left': 8,
+          'stretch_right': 8,
+          'stretch_top': 2,
+          'stretch_bottom': 2,
+          'content_left': 2,
+          'content_right': 2,
+          'content_top': 2,
+          'content_bottom': 2,
+          'inner_glow': true,
+        });
+        break;
+
+      case 'progress_track':
+        settings.addAll({
+          'width': 200,
+          'height': 8,
+          'corner_radius': 4,
+          'border_width': 0,
+          'style': 'inset',
+          'use_gradient': true,
+          'shadow_enabled': false,
+          'primary_color': '#bdc3c7',
+          'gradient_direction': 'vertical',
+          'stretch_left': 8,
+          'stretch_right': 8,
+          'stretch_top': 2,
+          'stretch_bottom': 2,
+          'content_left': 2,
+          'content_right': 2,
+          'content_top': 2,
+          'content_bottom': 2,
+        });
+        break;
+
+      case 'input_field':
+        settings.addAll({
+          'width': 160,
+          'height': 32,
+          'corner_radius': 6,
+          'border_width': 2,
+          'style': 'inset',
+          'use_gradient': false,
+          'shadow_enabled': false,
+          'primary_color': '#ffffff',
+          'gradient_direction': 'vertical',
+          'stretch_left': 40,
+          'stretch_right': 40,
+          'stretch_top': 12,
+          'stretch_bottom': 12,
+          'content_left': 12,
+          'content_right': 12,
+          'content_top': 6,
+          'content_bottom': 6,
+        });
+        break;
+
+      case 'card':
+        settings.addAll({
+          'width': 180,
+          'height': 120,
+          'corner_radius': 16,
+          'border_width': 0,
+          'style': 'raised',
+          'use_gradient': false,
+          'shadow_enabled': true,
+          'primary_color': '#ffffff',
+          'gradient_direction': 'vertical',
+          'stretch_left': 60,
+          'stretch_right': 60,
+          'stretch_top': 40,
+          'stretch_bottom': 40,
+          'content_left': 20,
+          'content_right': 20,
+          'content_top': 20,
+          'content_bottom': 20,
+          'shadow_blur': 8,
+          'shadow_offset_y': 4,
+          'shadow_opacity': 0.15,
+        });
+        break;
+
+      case 'dialog':
+        settings.addAll({
+          'width': 280,
+          'height': 180,
+          'corner_radius': 24,
+          'border_width': 0,
+          'style': 'raised',
+          'use_gradient': false,
+          'shadow_enabled': true,
+          'primary_color': '#ffffff',
+          'gradient_direction': 'vertical',
+          'stretch_left': 80,
+          'stretch_right': 80,
+          'stretch_top': 60,
+          'stretch_bottom': 60,
+          'content_left': 24,
+          'content_right': 24,
+          'content_top': 24,
+          'content_bottom': 24,
+          'shadow_blur': 12,
+          'shadow_offset_y': 6,
+          'shadow_opacity': 0.25,
+        });
+        break;
+
+      case 'toast':
+        settings.addAll({
+          'width': 200,
+          'height': 36,
+          'corner_radius': 18,
+          'border_width': 0,
+          'style': 'raised',
+          'use_gradient': true,
+          'shadow_enabled': true,
+          'primary_color': '#2c3e50',
+          'gradient_direction': 'vertical',
+          'stretch_left': 60,
+          'stretch_right': 60,
+          'stretch_top': 12,
+          'stretch_bottom': 12,
+          'content_left': 16,
+          'content_right': 16,
+          'content_top': 8,
+          'content_bottom': 8,
+          'shadow_blur': 6,
+          'shadow_offset_y': 3,
+        });
+        break;
+
+      case 'badge':
+        settings.addAll({
+          'width': 24,
+          'height': 24,
+          'corner_radius': 12,
+          'border_width': 0,
+          'style': 'flat',
+          'use_gradient': false,
+          'shadow_enabled': false,
+          'primary_color': '#e74c3c',
+          'gradient_direction': 'vertical',
+          'stretch_left': 8,
+          'stretch_right': 8,
+          'stretch_top': 8,
+          'stretch_bottom': 8,
+          'content_left': 4,
+          'content_right': 4,
+          'content_top': 4,
+          'content_bottom': 4,
+        });
+        break;
+
+      case 'chip':
+        settings.addAll({
+          'width': 80,
+          'height': 28,
+          'corner_radius': 14,
+          'border_width': 1,
+          'style': 'outlined',
+          'use_gradient': false,
+          'shadow_enabled': false,
+          'primary_color': '#9b59b6',
+          'gradient_direction': 'vertical',
+          'stretch_left': 20,
+          'stretch_right': 20,
+          'stretch_top': 10,
+          'stretch_bottom': 10,
+          'content_left': 8,
+          'content_right': 8,
+          'content_top': 4,
+          'content_bottom': 4,
+        });
+        break;
+
+      case 'tab':
+        settings.addAll({
+          'width': 100,
+          'height': 32,
+          'corner_radius': 16,
+          'border_width': 0,
+          'style': 'flat',
+          'use_gradient': true,
+          'shadow_enabled': false,
+          'primary_color': '#3498db',
+          'gradient_direction': 'vertical',
+          'stretch_left': 25,
+          'stretch_right': 25,
+          'stretch_top': 10,
+          'stretch_bottom': 10,
+          'content_left': 12,
+          'content_right': 12,
+          'content_top': 6,
+          'content_bottom': 6,
+        });
+        break;
+
+      case 'slider_thumb':
+        settings.addAll({
+          'width': 20,
+          'height': 20,
+          'corner_radius': 10,
+          'border_width': 2,
+          'style': 'raised',
+          'use_gradient': true,
+          'shadow_enabled': true,
+          'primary_color': '#ffffff',
+          'gradient_direction': 'vertical',
+          'stretch_left': 6,
+          'stretch_right': 6,
+          'stretch_top': 6,
+          'stretch_bottom': 6,
+          'content_left': 2,
+          'content_right': 2,
+          'content_top': 2,
+          'content_bottom': 2,
+          'shadow_blur': 3,
+          'shadow_offset_y': 1,
+          'inner_glow': true,
+        });
+        break;
+
+      case 'switch_track':
+        settings.addAll({
+          'width': 40,
+          'height': 20,
+          'corner_radius': 10,
+          'border_width': 1,
+          'style': 'inset',
+          'use_gradient': true,
+          'shadow_enabled': false,
+          'primary_color': '#bdc3c7',
+          'gradient_direction': 'vertical',
+          'stretch_left': 12,
+          'stretch_right': 12,
+          'stretch_top': 6,
+          'stretch_bottom': 6,
+          'content_left': 4,
+          'content_right': 4,
+          'content_top': 4,
+          'content_bottom': 4,
+        });
+        break;
+    }
+  }
+
+  String _generateSecondaryColor(String primaryHex) {
+    final primary = _parseHexColor(primaryHex);
+    final style = settings['style'] as String;
+
+    switch (style) {
+      case 'raised':
+        // Lighter version for highlight
+        return _lightenColor(primaryHex, 0.2);
+      case 'inset':
+        // Darker version for depth
+        return _darkenColor(primaryHex, 0.3);
+      case 'glass':
+        // More transparent version
+        return _adjustAlpha(primaryHex, 0.6);
+      default:
+        // Slightly darker for subtle gradient
+        return _darkenColor(primaryHex, 0.15);
+    }
+  }
+
+  List<int> _generate9PatchPNG() {
+    final width = settings['width'] as int;
+    final height = settings['height'] as int;
+
+    // Create image with 9-patch borders (2px on each side for markers)
+    final totalWidth = width + 2;
+    final totalHeight = height + 2;
+    final image = img.Image(width: totalWidth, height: totalHeight);
+
+    // Fill with transparent background
+    img.fill(image, color: img.ColorRgba8(0, 0, 0, 0));
+
+    // Draw shadow first (if enabled)
+    if (settings['shadow_enabled'] == true) {
+      _drawShadow(image, 1, 1, width, height);
+    }
+
+    // Draw the main decorator shape
+    _drawMainShape(image, 1, 1, width, height);
+
+    // Apply visual effects
+    _applyVisualEffects(image, 1, 1, width, height);
+
+    // Draw border (if enabled)
+    final borderWidth = settings['border_width'] as int;
+    if (borderWidth > 0) {
+      _drawBorder(image, 1, 1, width, height);
+    }
+
+    // Draw 9-patch markers
+    _draw9PatchMarkers(image, width, height);
+
+    return img.encodePng(image);
+  }
+
+  void _drawShadow(img.Image image, int x, int y, int width, int height) {
+    final shadowBlur = settings['shadow_blur'] as int;
+    final offsetX = settings['shadow_offset_x'] as int;
+    final offsetY = settings['shadow_offset_y'] as int;
+    final shadowOpacity = settings['shadow_opacity'] as double;
+    final cornerRadius = settings['corner_radius'] as int;
+
+    final shadowX = x + offsetX;
+    final shadowY = y + offsetY;
+
+    // Create shadow color
+    final shadowColor = img.ColorRgba8(0, 0, 0, (255 * shadowOpacity).round());
+
+    // Draw shadow with blur effect
+    for (int blur = shadowBlur; blur >= 0; blur--) {
+      final blurOpacity =
+          (shadowOpacity * (shadowBlur - blur + 1) / (shadowBlur + 1));
+      final blurColor = img.ColorRgba8(0, 0, 0, (255 * blurOpacity).round());
+
+      _drawRoundedRect(
+        image,
+        shadowX - blur,
+        shadowY - blur,
+        width + blur * 2,
+        height + blur * 2,
+        cornerRadius,
+        blurColor,
+      );
+    }
+  }
+
+  void _drawMainShape(img.Image image, int x, int y, int width, int height) {
+    final cornerRadius = settings['corner_radius'] as int;
+    final primaryColor = _parseHexColor(settings['primary_color'] as String);
+    final useGradient = settings['use_gradient'] as bool;
+
+    if (useGradient) {
+      _drawGradientShape(image, x, y, width, height, cornerRadius);
+    } else {
+      _drawRoundedRect(image, x, y, width, height, cornerRadius, primaryColor);
+    }
+  }
+
+  void _drawGradientShape(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int cornerRadius,
+  ) {
+    final primaryColor = _parseHexColor(settings['primary_color'] as String);
+    final secondaryColor = _parseHexColor(
+      settings['secondary_color'] as String,
+    );
+    final gradientDirection = settings['gradient_direction'] as String;
+
+    for (int py = 0; py < height; py++) {
+      for (int px = 0; px < width; px++) {
+        if (_isInsideRoundedRect(px, py, width, height, cornerRadius)) {
+          double factor = _calculateGradientFactor(
+            px,
+            py,
+            width,
+            height,
+            gradientDirection,
+          );
+          final color = _interpolateColors(
+            primaryColor,
+            secondaryColor,
+            factor,
+          );
+
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            image.setPixel(imgX, imgY, color);
+          }
+        }
+      }
+    }
+  }
+
+  double _calculateGradientFactor(
+    int px,
+    int py,
+    int width,
+    int height,
+    String direction,
+  ) {
+    switch (direction) {
+      case 'vertical':
+        return py / height;
+      case 'horizontal':
+        return px / width;
+      case 'diagonal':
+        return (px + py) / (width + height);
+      default:
+        return py / height;
+    }
+  }
+
+  void _applyVisualEffects(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+  ) {
+    final style = settings['style'] as String;
+    final cornerRadius = settings['corner_radius'] as int;
+
+    switch (style) {
+      case 'raised':
+        _applyRaisedEffect(image, x, y, width, height, cornerRadius);
+        break;
+      case 'inset':
+        _applyInsetEffect(image, x, y, width, height, cornerRadius);
+        break;
+      case 'glass':
+        _applyGlassEffect(image, x, y, width, height, cornerRadius);
+        break;
+    }
+
+    // Apply optional effects
+    if (settings['inner_glow'] == true) {
+      _applyInnerGlow(image, x, y, width, height, cornerRadius);
+    }
+
+    if (settings['texture_overlay'] == true) {
+      _applyTextureOverlay(image, x, y, width, height, cornerRadius);
+    }
+  }
+
+  void _applyRaisedEffect(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int cornerRadius,
+  ) {
+    // Add highlight on top edge
+    final highlightColor = img.ColorRgba8(255, 255, 255, 80);
+    final highlightHeight = max(1, height ~/ 8);
+
+    for (int py = 0; py < highlightHeight; py++) {
+      for (int px = 0; px < width; px++) {
+        if (_isInsideRoundedRect(px, py, width, height, cornerRadius)) {
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            final existing = image.getPixel(imgX, imgY);
+            final blended = _blendColors(existing, highlightColor);
+            image.setPixel(imgX, imgY, blended);
+          }
+        }
+      }
+    }
+
+    // Add shadow on bottom edge
+    final shadowColor = img.ColorRgba8(0, 0, 0, 60);
+    final shadowHeight = max(1, height ~/ 8);
+
+    for (int py = height - shadowHeight; py < height; py++) {
+      for (int px = 0; px < width; px++) {
+        if (_isInsideRoundedRect(px, py, width, height, cornerRadius)) {
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            final existing = image.getPixel(imgX, imgY);
+            final blended = _blendColors(existing, shadowColor);
+            image.setPixel(imgX, imgY, blended);
+          }
+        }
+      }
+    }
+  }
+
+  void _applyInsetEffect(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int cornerRadius,
+  ) {
+    // Add shadow on top edge (opposite of raised)
+    final shadowColor = img.ColorRgba8(0, 0, 0, 100);
+    final shadowHeight = max(1, height ~/ 6);
+
+    for (int py = 0; py < shadowHeight; py++) {
+      for (int px = 0; px < width; px++) {
+        if (_isInsideRoundedRect(px, py, width, height, cornerRadius)) {
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            final existing = image.getPixel(imgX, imgY);
+            final blended = _blendColors(existing, shadowColor);
+            image.setPixel(imgX, imgY, blended);
+          }
+        }
+      }
+    }
+  }
+
+  void _applyGlassEffect(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int cornerRadius,
+  ) {
+    // Add strong highlight on top half
+    final highlightColor = img.ColorRgba8(255, 255, 255, 120);
+    final highlightHeight = height ~/ 2;
+
+    for (int py = 0; py < highlightHeight; py++) {
+      final opacity = (120 * (1 - py / highlightHeight)).round();
+      final fadeColor = img.ColorRgba8(255, 255, 255, opacity);
+
+      for (int px = 0; px < width; px++) {
+        if (_isInsideRoundedRect(px, py, width, height, cornerRadius)) {
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            final existing = image.getPixel(imgX, imgY);
+            final blended = _blendColors(existing, fadeColor);
+            image.setPixel(imgX, imgY, blended);
+          }
+        }
+      }
+    }
+  }
+
+  void _applyInnerGlow(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int cornerRadius,
+  ) {
+    final glowColor = img.ColorRgba8(255, 255, 255, 40);
+    final glowWidth = 2;
+
+    // Draw inner glow around the edge
+    for (int py = 0; py < height; py++) {
+      for (int px = 0; px < width; px++) {
+        if (_isInsideRoundedRect(px, py, width, height, cornerRadius)) {
+          // Check if this pixel is near the edge
+          bool nearEdge = false;
+          for (int dy = -glowWidth; dy <= glowWidth && !nearEdge; dy++) {
+            for (int dx = -glowWidth; dx <= glowWidth && !nearEdge; dx++) {
+              if (!_isInsideRoundedRect(
+                px + dx,
+                py + dy,
+                width,
+                height,
+                cornerRadius,
+              )) {
+                nearEdge = true;
+              }
+            }
+          }
+
+          if (nearEdge) {
+            final imgX = x + px;
+            final imgY = y + py;
+            if (_isValidPixel(image, imgX, imgY)) {
+              final existing = image.getPixel(imgX, imgY);
+              final blended = _blendColors(existing, glowColor);
+              image.setPixel(imgX, imgY, blended);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void _applyTextureOverlay(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int cornerRadius,
+  ) {
+    final random = Random(42); // Fixed seed for consistent texture
+
+    for (int py = 0; py < height; py++) {
+      for (int px = 0; px < width; px++) {
+        if (_isInsideRoundedRect(px, py, width, height, cornerRadius)) {
+          // Simple noise texture
+          final noise = random.nextDouble() * 0.1 - 0.05; // -5% to +5%
+          final textureOpacity = (20 + noise * 255).round().clamp(0, 255);
+          final textureColor = img.ColorRgba8(128, 128, 128, textureOpacity);
+
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            final existing = image.getPixel(imgX, imgY);
+            final blended = _blendColors(existing, textureColor);
+            image.setPixel(imgX, imgY, blended);
+          }
+        }
+      }
+    }
+  }
+
+  void _drawBorder(img.Image image, int x, int y, int width, int height) {
+    final borderWidth = settings['border_width'] as int;
+    final cornerRadius = settings['corner_radius'] as int;
+    final borderColor = _getBorderColor();
+
+    // Draw border by checking if pixel is in outer shape but not in inner shape
+    for (int py = 0; py < height; py++) {
+      for (int px = 0; px < width; px++) {
+        final isInOuter = _isInsideRoundedRect(
+          px,
+          py,
+          width,
+          height,
+          cornerRadius,
+        );
+        final isInInner = _isInsideRoundedRect(
+          px - borderWidth,
+          py - borderWidth,
+          width - 2 * borderWidth,
+          height - 2 * borderWidth,
+          max(0, cornerRadius - borderWidth),
+        );
+
+        if (isInOuter && !isInInner) {
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            image.setPixel(imgX, imgY, borderColor);
+          }
+        }
+      }
+    }
+
+    // Apply border glow if enabled
+    if (settings['border_glow'] == true) {
+      _applyBorderGlow(image, x, y, width, height, cornerRadius, borderWidth);
+    }
+  }
+
+  void _applyBorderGlow(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int cornerRadius,
+    int borderWidth,
+  ) {
+    final glowColor = _parseHexColor(settings['primary_color'] as String);
+    final glowSize = 2;
+
+    for (int py = -glowSize; py < height + glowSize; py++) {
+      for (int px = -glowSize; px < width + glowSize; px++) {
+        final distance = _getDistanceToShape(
+          px,
+          py,
+          width,
+          height,
+          cornerRadius,
+        );
+
+        if (distance >= borderWidth && distance <= borderWidth + glowSize) {
+          final glowIntensity = 1.0 - ((distance - borderWidth) / glowSize);
+          final glowAlpha = (60 * glowIntensity).round();
+          final finalGlowColor = img.ColorRgba8(
+            glowColor.r.toInt(),
+            glowColor.g.toInt(),
+            glowColor.b.toInt(),
+            glowAlpha,
+          );
+
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            final existing = image.getPixel(imgX, imgY);
+            final blended = _blendColors(existing, finalGlowColor);
+            image.setPixel(imgX, imgY, blended);
+          }
+        }
+      }
+    }
+  }
+
+  void _draw9PatchMarkers(img.Image image, int width, int height) {
+    final stretchLeft = settings['stretch_left'] as int;
+    final stretchRight = settings['stretch_right'] as int;
+    final stretchTop = settings['stretch_top'] as int;
+    final stretchBottom = settings['stretch_bottom'] as int;
+
+    final contentLeft = settings['content_left'] as int;
+    final contentRight = settings['content_right'] as int;
+    final contentTop = settings['content_top'] as int;
+    final contentBottom = settings['content_bottom'] as int;
+
+    final black = img.ColorRgba8(0, 0, 0, 255);
+
+    // Top stretch markers (horizontal stretchable area)
+    final leftStretchEnd = width - stretchRight;
+    for (int i = stretchLeft; i < leftStretchEnd; i++) {
+      if (i + 1 < image.width) {
+        image.setPixel(i + 1, 0, black);
+      }
+    }
+
+    // Left stretch markers (vertical stretchable area)
+    final topStretchEnd = height - stretchBottom;
+    for (int i = stretchTop; i < topStretchEnd; i++) {
+      if (i + 1 < image.height) {
+        image.setPixel(0, i + 1, black);
+      }
+    }
+
+    // Bottom content area markers (horizontal content padding)
+    final contentRightEnd = width - contentRight;
+    for (int i = contentLeft; i < contentRightEnd; i++) {
+      if (i + 1 < image.width && height + 1 < image.height) {
+        image.setPixel(i + 1, height + 1, black);
+      }
+    }
+
+    // Right content area markers (vertical content padding)
+    final contentBottomEnd = height - contentBottom;
+    for (int i = contentTop; i < contentBottomEnd; i++) {
+      if (width + 1 < image.width && i + 1 < image.height) {
+        image.setPixel(width + 1, i + 1, black);
+      }
+    }
+  }
+
+  void _drawRoundedRect(
+    img.Image image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int radius,
+    img.Color color,
+  ) {
+    for (int py = 0; py < height; py++) {
+      for (int px = 0; px < width; px++) {
+        if (_isInsideRoundedRect(px, py, width, height, radius)) {
+          final imgX = x + px;
+          final imgY = y + py;
+          if (_isValidPixel(image, imgX, imgY)) {
+            image.setPixel(imgX, imgY, color);
+          }
+        }
+      }
+    }
+  }
+
+  bool _isInsideRoundedRect(int px, int py, int width, int height, int radius) {
+    if (px < 0 || py < 0 || px >= width || py >= height) return false;
+    if (radius <= 0) return true;
+
+    // Check corners
+    final corners = [
+      {'x': radius, 'y': radius}, // Top-left
+      {'x': width - radius, 'y': radius}, // Top-right
+      {'x': radius, 'y': height - radius}, // Bottom-left
+      {'x': width - radius, 'y': height - radius}, // Bottom-right
+    ];
+
+    for (final corner in corners) {
+      final cx = corner['x'] as int;
+      final cy = corner['y'] as int;
+
+      // Check if point is in this corner's quadrant
+      bool inQuadrant = false;
+      if (cx == radius && cy == radius) {
+        // Top-left
+        inQuadrant = px <= radius && py <= radius;
+      } else if (cx == width - radius && cy == radius) {
+        // Top-right
+        inQuadrant = px >= width - radius && py <= radius;
+      } else if (cx == radius && cy == height - radius) {
+        // Bottom-left
+        inQuadrant = px <= radius && py >= height - radius;
+      } else if (cx == width - radius && cy == height - radius) {
+        // Bottom-right
+        inQuadrant = px >= width - radius && py >= height - radius;
+      }
+
+      if (inQuadrant) {
+        final dx = px - cx;
+        final dy = py - cy;
+        return dx * dx + dy * dy <= radius * radius;
+      }
+    }
+
+    return true; // Point is not in any corner area, so it's inside
+  }
+
+  double _getDistanceToShape(
+    int px,
+    int py,
+    int width,
+    int height,
+    int radius,
+  ) {
+    // Simple distance calculation to shape edge
+    if (_isInsideRoundedRect(px, py, width, height, radius)) {
+      return 0.0;
+    }
+
+    // Calculate distance to nearest edge
+    double minDist = double.infinity;
+
+    // Check distance to edges
+    if (px < 0) minDist = min(minDist, -px.toDouble());
+    if (px >= width) minDist = min(minDist, (px - width + 1).toDouble());
+    if (py < 0) minDist = min(minDist, -py.toDouble());
+    if (py >= height) minDist = min(minDist, (py - height + 1).toDouble());
+
+    return minDist;
+  }
+
+  bool _isValidPixel(img.Image image, int x, int y) {
+    return x >= 0 && y >= 0 && x < image.width && y < image.height;
+  }
+
+  img.Color _parseHexColor(String hexColor) {
+    final hex = hexColor.replaceAll('#', '');
+    if (hex.length == 6) {
+      final r = int.parse(hex.substring(0, 2), radix: 16);
+      final g = int.parse(hex.substring(2, 4), radix: 16);
+      final b = int.parse(hex.substring(4, 6), radix: 16);
+      return img.ColorRgba8(r, g, b, 255);
+    } else if (hex.length == 8) {
+      final r = int.parse(hex.substring(0, 2), radix: 16);
+      final g = int.parse(hex.substring(2, 4), radix: 16);
+      final b = int.parse(hex.substring(4, 6), radix: 16);
+      final a = int.parse(hex.substring(6, 8), radix: 16);
+      return img.ColorRgba8(r, g, b, a);
+    }
+    return img.ColorRgba8(0, 0, 0, 255);
+  }
+
+  img.Color _interpolateColors(
+    img.Color color1,
+    img.Color color2,
+    double factor,
+  ) {
+    factor = factor.clamp(0.0, 1.0);
+
+    final r = (color1.r + (color2.r - color1.r) * factor).round();
+    final g = (color1.g + (color2.g - color1.g) * factor).round();
+    final b = (color1.b + (color2.b - color1.b) * factor).round();
+    final a = (color1.a + (color2.a - color1.a) * factor).round();
+
+    return img.ColorRgba8(r, g, b, a);
+  }
+
+  img.Color _blendColors(img.Color base, img.Color overlay) {
+    final alpha = overlay.a / 255.0;
+    final invAlpha = 1.0 - alpha;
+
+    final r = (base.r * invAlpha + overlay.r * alpha).round();
+    final g = (base.g * invAlpha + overlay.g * alpha).round();
+    final b = (base.b * invAlpha + overlay.b * alpha).round();
+    final a = max(base.a, overlay.a);
+
+    return img.ColorRgba8(r, g, b, a.toInt());
+  }
+
+  img.Color _getBorderColor() {
+    final style = settings['style'] as String;
+    final primaryColor = _parseHexColor(settings['primary_color'] as String);
+
+    if (style == 'outlined') {
+      return primaryColor;
+    } else {
+      // Generate darker version for border
+      final darkR = (primaryColor.r * 0.6).round();
+      final darkG = (primaryColor.g * 0.6).round();
+      final darkB = (primaryColor.b * 0.6).round();
+      return img.ColorRgba8(darkR, darkG, darkB, primaryColor.a.toInt());
+    }
+  }
+
+  String _lightenColor(String hexColor, double amount) {
+    final color = _parseHexColor(hexColor);
+    final r = (color.r + (255 - color.r) * amount).clamp(0, 255).round();
+    final g = (color.g + (255 - color.g) * amount).clamp(0, 255).round();
+    final b = (color.b + (255 - color.b) * amount).clamp(0, 255).round();
+
+    return '#${r.toRadixString(16).padLeft(2, '0')}'
+        '${g.toRadixString(16).padLeft(2, '0')}'
+        '${b.toRadixString(16).padLeft(2, '0')}';
+  }
+
+  String _darkenColor(String hexColor, double amount) {
+    final color = _parseHexColor(hexColor);
+    final r = (color.r * (1 - amount)).clamp(0, 255).round();
+    final g = (color.g * (1 - amount)).clamp(0, 255).round();
+    final b = (color.b * (1 - amount)).clamp(0, 255).round();
+
+    return '#${r.toRadixString(16).padLeft(2, '0')}'
+        '${g.toRadixString(16).padLeft(2, '0')}'
+        '${b.toRadixString(16).padLeft(2, '0')}';
+  }
+
+  String _adjustAlpha(String hexColor, double alpha) {
+    final color = _parseHexColor(hexColor);
+    final newAlpha = (255 * alpha).clamp(0, 255).round();
+
+    return '#'
+        '${(color.r as int).toRadixString(16).padLeft(2, '0')}'
+        '${(color.g as int).toRadixString(16).padLeft(2, '0')}'
+        '${(color.b as int).toRadixString(16).padLeft(2, '0')}'
+        '${(newAlpha.round()).toRadixString(16).padLeft(2, '0')}';
+  }
+
+  String _generateFlutterCode() {
+    final width = settings['width'] as int;
+    final height = settings['height'] as int;
+    final cornerRadius = settings['corner_radius'] as int;
+    final borderWidth = settings['border_width'] as int;
+    final primaryColor = settings['primary_color'] as String;
+    final secondaryColor = settings['secondary_color'] as String;
+    final useGradient = settings['use_gradient'] as bool;
+    final gradientDirection = settings['gradient_direction'] as String;
+    final shadowEnabled = settings['shadow_enabled'] as bool;
+    final style = settings['style'] as String;
+
+    final code = StringBuffer();
+    code.writeln('// Using 9-patch image');
+    code.writeln('Container(');
+    code.writeln('  width: $width,');
+    code.writeln('  height: $height,');
+    code.writeln('  decoration: BoxDecoration(');
+    code.writeln('    image: DecorationImage(');
+    code.writeln(
+      '      image: AssetImage(\'assets/9patch_${settings['preset']}.9.png\'),',
+    );
+    code.writeln('      fit: BoxFit.fill, // Important: Use fill for 9-patch');
+    code.writeln('    ),');
+    code.writeln('  ),');
+    code.writeln('  child: Text(\'Your content here\'),');
+    code.writeln(')');
+
+    code.writeln('\n// Alternative: Pure Flutter BoxDecoration');
+    code.writeln('Container(');
+    code.writeln('  width: $width,');
+    code.writeln('  height: $height,');
+    code.writeln('  decoration: BoxDecoration(');
+    code.writeln('    borderRadius: BorderRadius.circular($cornerRadius.0),');
+
+    if (useGradient) {
+      code.writeln(
+        '    gradient: ${_getFlutterGradient(gradientDirection, primaryColor, secondaryColor)},',
+      );
+    } else {
+      final cleanColor = primaryColor.replaceAll('#', '');
+      code.writeln('    color: Color(0xFF$cleanColor),');
+    }
+
+    if (borderWidth > 0) {
+      final borderColor = _getBorderColor();
+      final cleanBorderColor = _colorToHex(borderColor).replaceAll('#', '');
+      code.writeln('    border: Border.all(');
+      code.writeln('      color: Color(0xFF$cleanBorderColor),');
+      code.writeln('      width: $borderWidth.0,');
+      code.writeln('    ),');
+    }
+
+    if (shadowEnabled) {
+      final shadowBlur = settings['shadow_blur'] as int;
+      final offsetX = settings['shadow_offset_x'] as int;
+      final offsetY = settings['shadow_offset_y'] as int;
+      final shadowOpacity = settings['shadow_opacity'] as double;
+
+      code.writeln('    boxShadow: [');
+      code.writeln('      BoxShadow(');
+      code.writeln('        color: Colors.black.withOpacity($shadowOpacity),');
+      code.writeln('        blurRadius: $shadowBlur.0,');
+      code.writeln('        offset: Offset($offsetX.0, $offsetY.0),');
+      code.writeln('      ),');
+      code.writeln('    ],');
+    }
+
+    code.writeln('  ),');
+    code.writeln('  child: Text(\'Your content here\'),');
+    code.writeln(')');
+
+    return code.toString();
+  }
+
+  String _getFlutterGradient(String direction, String color1, String color2) {
+    final cleanColor1 = color1.replaceAll('#', '');
+    final cleanColor2 = color2.replaceAll('#', '');
+
+    switch (direction) {
+      case 'vertical':
+        return 'LinearGradient(\n      begin: Alignment.topCenter,\n      end: Alignment.bottomCenter,\n      colors: [Color(0xFF$cleanColor1), Color(0xFF$cleanColor2)],\n    )';
+      case 'horizontal':
+        return 'LinearGradient(\n      begin: Alignment.centerLeft,\n      end: Alignment.centerRight,\n      colors: [Color(0xFF$cleanColor1), Color(0xFF$cleanColor2)],\n    )';
+      case 'diagonal':
+        return 'LinearGradient(\n      begin: Alignment.topLeft,\n      end: Alignment.bottomRight,\n      colors: [Color(0xFF$cleanColor1), Color(0xFF$cleanColor2)],\n    )';
+      default:
+        return 'LinearGradient(colors: [Color(0xFF$cleanColor1), Color(0xFF$cleanColor2)])';
+    }
+  }
+
+  String _colorToHex(img.Color color) {
+    return '#${color.r.toInt().toRadixString(16).padLeft(2, '0')}'
+        '${color.g.toInt().toRadixString(16).padLeft(2, '0')}'
+        '${color.b.toInt().toRadixString(16).padLeft(2, '0')}';
+  }
+
+  String _getUsageInstructions() {
+    return '''
+## 📋 How to Use Your 9-Patch
+
+### 1. **Add to Flutter Project**
+```yaml
+# pubspec.yaml
+flutter:
+  assets:
+    - assets/9patch_${settings['preset']}.9.png
+```
+
+### 2. **Android Integration**
+- Place the `.9.png` file in `android/app/src/main/res/drawable/`
+- Reference in XML layouts: `android:background="@drawable/9patch_${settings['preset']}"`
+
+### 3. **9-Patch Stretching Guide**
+- **Black pixels on TOP edge**: Define horizontal stretch areas
+- **Black pixels on LEFT edge**: Define vertical stretch areas  
+- **Black pixels on BOTTOM edge**: Define horizontal content padding
+- **Black pixels on RIGHT edge**: Define vertical content padding
+
+### 4. **Current Stretch Configuration**
+- **Horizontal stretch**: Pixels ${settings['stretch_left']} to ${(settings['width'] as int) - (settings['stretch_right'] as int)} will stretch
+- **Vertical stretch**: Pixels ${settings['stretch_top']} to ${(settings['height'] as int) - (settings['stretch_bottom'] as int)} will stretch
+- **Content area**: ${settings['content_left']},${settings['content_top']} to ${(settings['width'] as int) - (settings['content_right'] as int)},${(settings['height'] as int) - (settings['content_bottom'] as int)}
+
+### 5. **Best Practices**
+- Use **BoxFit.fill** when using 9-patch as DecorationImage
+- Test stretching with different content sizes
+- Keep stretch areas away from visual details (corners, borders)
+- Ensure content padding provides enough space for text/icons
+
+### 6. **Preset Optimizations**
+- **${settings['preset']}**: Optimized for ${_getPresetDescription()}
+''';
+  }
+
+  String _getPresetDescription() {
+    switch (settings['preset']) {
+      case 'button':
+        return 'clickable elements with proper touch targets';
+      case 'panel':
+        return 'content containers and background panels';
+      case 'progress_bar':
+        return 'horizontal progress indicators';
+      case 'progress_track':
+        return 'progress bar backgrounds';
+      case 'input_field':
+        return 'text input backgrounds with focus states';
+      case 'card':
+        return 'elevated content cards with shadows';
+      case 'dialog':
+        return 'modal dialogs and popups';
+      case 'toast':
+        return 'notification messages';
+      case 'badge':
+        return 'small notification counters';
+      case 'chip':
+        return 'tag-like selections';
+      case 'tab':
+        return 'tab navigation elements';
+      case 'slider_thumb':
+        return 'draggable slider controls';
+      case 'switch_track':
+        return 'toggle switch backgrounds';
+      default:
+        return 'general UI elements';
+    }
+  }
+}
+
 Map<String, List<Tool Function()>> getMiscTools() {
   return {
-    'Misc': [
-      () => ColorPaletteGenerator(),
+    'Image Tools': [
       () => PngToIcoTool(),
-      () => NinePatchUITool(),
       () => ImageEditorTool(),
+      () => PwaIconTool(),
+      () => NinePatchDecoratorTool(),
     ],
+    'Misc': [() => ColorPaletteGenerator(), () => NinePatchUITool()],
   };
 }
