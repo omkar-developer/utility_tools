@@ -60,16 +60,37 @@ class JsTool extends Tool {
     final supportsLiveUpdate = getGlobal('supportsLiveUpdate', true) as bool;
     final allowEmptyInput = getGlobal('allowEmptyInput', false) as bool;
 
-    final settingsJson = js.eval('JSON.stringify(settings);');
-    final hintsJson = js.eval('JSON.stringify(settingsHints);');
+    // Fixed: Check if settings/settingsHints exist before trying to stringify them
+    Map<String, dynamic> settings = <String, dynamic>{};
+    Map<String, dynamic> settingsHints = <String, dynamic>{};
 
-    final settings = (settingsJson != null)
-        ? Map<String, dynamic>.from(jsonDecode(settingsJson))
-        : <String, dynamic>{};
+    try {
+      // Check if settings exists and is an object
+      final settingsType = js.eval('typeof settings');
+      if (settingsType == 'object') {
+        final settingsJson = js.eval('JSON.stringify(settings);');
+        if (settingsJson != null) {
+          settings = Map<String, dynamic>.from(jsonDecode(settingsJson));
+        }
+      }
+    } catch (e) {
+      // Settings doesn't exist or can't be serialized, use empty map
+      settings = <String, dynamic>{};
+    }
 
-    final settingsHints = (hintsJson != null)
-        ? Map<String, dynamic>.from(jsonDecode(hintsJson))
-        : <String, dynamic>{};
+    try {
+      // Check if settingsHints exists and is an object
+      final hintsType = js.eval('typeof settingsHints');
+      if (hintsType == 'object') {
+        final hintsJson = js.eval('JSON.stringify(settingsHints);');
+        if (hintsJson != null) {
+          settingsHints = Map<String, dynamic>.from(jsonDecode(hintsJson));
+        }
+      }
+    } catch (e) {
+      // SettingsHints doesn't exist or can't be serialized, use empty map
+      settingsHints = <String, dynamic>{};
+    }
 
     final tool = JsTool._internal(
       script: scriptContent,
@@ -227,7 +248,7 @@ var supportsLiveUpdate = true;
 var allowEmptyInput = false;
 
 function execute(input, settings) {
-  return "🔁 Echo: " + input + "\n\nSettings: " + JSON.stringify(settings);
+  return "🔊 Echo: " + input + "\n\nSettings: " + JSON.stringify(settings);
 }
 """;
 

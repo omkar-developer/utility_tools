@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'dart:io' show Platform;
 
 class Base64ImageField extends StatelessWidget {
   final TextEditingController? controller;
@@ -28,7 +29,7 @@ class Base64ImageField extends StatelessWidget {
         textAlign: TextAlign.start,
         textAlignVertical: TextAlignVertical.top,
         expands: true,
-        style: Platform.isWindows
+        style: (!kIsWeb && Platform.isWindows)
             ? TextStyle(fontFamily: 'Segoe UI Emoji', fontSize: fontSize)
             : null,
         decoration: const InputDecoration(
@@ -75,7 +76,7 @@ class Base64ImageField extends StatelessWidget {
           textAlign: TextAlign.start,
           textAlignVertical: TextAlignVertical.top,
           expands: true,
-          style: Platform.isWindows
+          style: (!kIsWeb && Platform.isWindows)
               ? TextStyle(fontFamily: 'Segoe UI Emoji', fontSize: fontSize)
               : null,
           decoration: const InputDecoration(
@@ -88,12 +89,6 @@ class Base64ImageField extends StatelessWidget {
         );
       },
     );
-  }
-
-  double _calculateScale(Size size, double maxWidth, double maxHeight) {
-    final widthScale = maxWidth / size.width;
-    final heightScale = maxHeight / size.height;
-    return widthScale < heightScale ? widthScale : heightScale;
   }
 
   Future<Size> _getImageSize(Uint8List bytes) async {
