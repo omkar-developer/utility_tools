@@ -1,0 +1,174 @@
+Date : 2025-09-14 08:00:18
+Directory : d:\flutter_apps\utilities\utility_tools
+Total : 90 files,  27151 codes, 1243 comments, 3049 blanks, all 31443 lines
+
+Languages
++------------+------------+------------+------------+------------+------------+
+| language   | files      | code       | comment    | blank      | total      |
++------------+------------+------------+------------+------------+------------+
+| Dart       |         37 |     25,034 |        967 |      2,673 |     28,674 |
+| C++        |         16 |        578 |        131 |        189 |        898 |
+| CMake      |          8 |        474 |          0 |         92 |        566 |
+| XML        |         10 |        470 |         53 |         12 |        535 |
+| JSON       |          4 |        248 |          0 |          4 |        252 |
+| Markdown   |          3 |        186 |          0 |         30 |        216 |
+| Swift      |          6 |         69 |          7 |         21 |         97 |
+| YAML       |          3 |         65 |         70 |         21 |        156 |
+| HTML       |          1 |         19 |         15 |          5 |         39 |
+| Properties |          2 |          8 |          0 |          2 |         10 |
++------------+------------+------------+------------+------------+------------+
+
+Directories
++-------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                  | files      | code       | comment    | blank      | total      |
++-------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                     |         90 |     27,151 |      1,243 |      3,049 |     31,443 |
+| . (Files)                                                                                             |          4 |         75 |         70 |         28 |        173 |
+| android                                                                                               |          9 |         74 |         51 |         11 |        136 |
+| android (Files)                                                                                       |          1 |          3 |          0 |          1 |          4 |
+| android\app                                                                                           |          7 |         66 |         51 |          9 |        126 |
+| android\app\src                                                                                       |          7 |         66 |         51 |          9 |        126 |
+| android\app\src\debug                                                                                 |          1 |          3 |          4 |          1 |          8 |
+| android\app\src\main                                                                                  |          5 |         60 |         43 |          7 |        110 |
+| android\app\src\main (Files)                                                                          |          1 |         34 |         11 |          1 |         46 |
+| android\app\src\main\res                                                                              |          4 |         26 |         32 |          6 |         64 |
+| android\app\src\main\res\drawable                                                                     |          1 |          4 |          7 |          2 |         13 |
+| android\app\src\main\res\drawable-v21                                                                 |          1 |          4 |          7 |          2 |         13 |
+| android\app\src\main\res\values                                                                       |          1 |          9 |          9 |          1 |         19 |
+| android\app\src\main\res\values-night                                                                 |          1 |          9 |          9 |          1 |         19 |
+| android\app\src\profile                                                                               |          1 |          3 |          4 |          1 |          8 |
+| android\gradle                                                                                        |          1 |          5 |          0 |          1 |          6 |
+| android\gradle\wrapper                                                                                |          1 |          5 |          0 |          1 |          6 |
+| ios                                                                                                   |          8 |        229 |          4 |         13 |        246 |
+| ios\Runner                                                                                            |          7 |        222 |          2 |          9 |        233 |
+| ios\Runner (Files)                                                                                    |          2 |         13 |          0 |          3 |         16 |
+| ios\RunnerTests                                                                                       |          1 |          7 |          2 |          4 |         13 |
+| ios\Runner\Assets.xcassets                                                                            |          3 |        148 |          0 |          4 |        152 |
+| ios\Runner\Assets.xcassets\AppIcon.appiconset                                                         |          1 |        122 |          0 |          1 |        123 |
+| ios\Runner\Assets.xcassets\LaunchImage.imageset                                                       |          2 |         26 |          0 |          3 |         29 |
+| ios\Runner\Base.lproj                                                                                 |          2 |         61 |          2 |          2 |         65 |
+| lib                                                                                                   |         37 |     25,193 |        957 |      2,687 |     28,837 |
+| lib (Files)                                                                                           |          2 |        711 |         25 |         80 |        816 |
+| lib\classes                                                                                           |          2 |        100 |          5 |         20 |        125 |
+| lib\models                                                                                            |          5 |        525 |         29 |         93 |        647 |
+| lib\page                                                                                              |          1 |      1,091 |         24 |         88 |      1,203 |
+| lib\services                                                                                          |          5 |      1,398 |         93 |        233 |      1,724 |
+| lib\text_tools                                                                                        |         11 |     15,999 |        623 |      1,784 |     18,406 |
+| lib\theme                                                                                             |          1 |          6 |          0 |          2 |          8 |
+| lib\widgets                                                                                           |         10 |      5,363 |        158 |        387 |      5,908 |
+| linux                                                                                                 |          9 |        351 |         37 |         92 |        480 |
+| linux (Files)                                                                                         |          1 |        104 |          0 |         25 |        129 |
+| linux\flutter                                                                                         |          4 |        131 |          9 |         27 |        167 |
+| linux\runner                                                                                          |          4 |        116 |         28 |         40 |        184 |
+| macos                                                                                                 |          6 |        461 |          5 |         17 |        483 |
+| macos\Flutter                                                                                         |          1 |         20 |          3 |          4 |         27 |
+| macos\Runner                                                                                          |          4 |        434 |          0 |          9 |        443 |
+| macos\Runner (Files)                                                                                  |          2 |         23 |          0 |          7 |         30 |
+| macos\RunnerTests                                                                                     |          1 |          7 |          2 |          4 |         13 |
+| macos\Runner\Assets.xcassets                                                                          |          1 |         68 |          0 |          1 |         69 |
+| macos\Runner\Assets.xcassets\AppIcon.appiconset                                                       |          1 |         68 |          0 |          1 |         69 |
+| macos\Runner\Base.lproj                                                                               |          1 |        343 |          0 |          1 |        344 |
+| test                                                                                                  |          1 |         14 |         10 |          7 |         31 |
+| web                                                                                                   |          2 |         54 |         15 |          6 |         75 |
+| windows                                                                                               |         14 |        700 |         94 |        188 |        982 |
+| windows (Files)                                                                                       |          1 |         89 |          0 |         20 |        109 |
+| windows\flutter                                                                                       |          4 |        149 |          9 |         29 |        187 |
+| windows\runner                                                                                        |          9 |        462 |         85 |        139 |        686 |
++-------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| filename                                                                                              | language   | code       | comment    | blank      | total      |
++-------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| d:\flutter_apps\utilities\utility_tools\README.md                                                     | Markdown   |         10 |          0 |          7 |         17 |
+| d:\flutter_apps\utilities\utility_tools\analysis_options.yaml                                         | YAML       |          3 |         22 |          4 |         29 |
+| d:\flutter_apps\utilities\utility_tools\android\app\src\debug\AndroidManifest.xml                     | XML        |          3 |          4 |          1 |          8 |
+| d:\flutter_apps\utilities\utility_tools\android\app\src\main\AndroidManifest.xml                      | XML        |         34 |         11 |          1 |         46 |
+| d:\flutter_apps\utilities\utility_tools\android\app\src\main\res\drawable-v21\launch_background.xml   | XML        |          4 |          7 |          2 |         13 |
+| d:\flutter_apps\utilities\utility_tools\android\app\src\main\res\drawable\launch_background.xml       | XML        |          4 |          7 |          2 |         13 |
+| d:\flutter_apps\utilities\utility_tools\android\app\src\main\res\values-night\styles.xml              | XML        |          9 |          9 |          1 |         19 |
+| d:\flutter_apps\utilities\utility_tools\android\app\src\main\res\values\styles.xml                    | XML        |          9 |          9 |          1 |         19 |
+| d:\flutter_apps\utilities\utility_tools\android\app\src\profile\AndroidManifest.xml                   | XML        |          3 |          4 |          1 |          8 |
+| d:\flutter_apps\utilities\utility_tools\android\gradle.properties                                     | Properties |          3 |          0 |          1 |          4 |
+| d:\flutter_apps\utilities\utility_tools\android\gradle\wrapper\gradle-wrapper.properties              | Properties |          5 |          0 |          1 |          6 |
+| d:\flutter_apps\utilities\utility_tools\devtools_options.yaml                                         | YAML       |          3 |          0 |          1 |          4 |
+| d:\flutter_apps\utilities\utility_tools\ios\RunnerTests\RunnerTests.swift                             | Swift      |          7 |          2 |          4 |         13 |
+| d:\flutter_apps\utilities\utility_tools\ios\Runner\AppDelegate.swift                                  | Swift      |         12 |          0 |          2 |         14 |
+| d:\flutter_apps\utilities\utility_tools\ios\Runner\Assets.xcassets\AppIcon.appiconset\Contents.json   | JSON       |        122 |          0 |          1 |        123 |
+| d:\flutter_apps\utilities\utility_tools\ios\Runner\Assets.xcassets\LaunchImage.imageset\Contents.json | JSON       |         23 |          0 |          1 |         24 |
+| d:\flutter_apps\utilities\utility_tools\ios\Runner\Assets.xcassets\LaunchImage.imageset\README.md     | Markdown   |          3 |          0 |          2 |          5 |
+| d:\flutter_apps\utilities\utility_tools\ios\Runner\Base.lproj\LaunchScreen.storyboard                 | XML        |         36 |          1 |          1 |         38 |
+| d:\flutter_apps\utilities\utility_tools\ios\Runner\Base.lproj\Main.storyboard                         | XML        |         25 |          1 |          1 |         27 |
+| d:\flutter_apps\utilities\utility_tools\ios\Runner\Runner-Bridging-Header.h                           | C++        |          1 |          0 |          1 |          2 |
+| d:\flutter_apps\utilities\utility_tools\lib\classes\chain_executer.dart                               | Dart       |         92 |          5 |         16 |        113 |
+| d:\flutter_apps\utilities\utility_tools\lib\classes\js_change_notifier.dart                           | Dart       |          8 |          0 |          4 |         12 |
+| d:\flutter_apps\utilities\utility_tools\lib\main.dart                                                 | Dart       |        538 |         25 |         59 |        622 |
+| d:\flutter_apps\utilities\utility_tools\lib\models\js_script_model.dart                               | Dart       |         81 |          6 |         19 |        106 |
+| d:\flutter_apps\utilities\utility_tools\lib\models\js_script_model.g.dart                             | Dart       |         85 |          4 |         13 |        102 |
+| d:\flutter_apps\utilities\utility_tools\lib\models\saved_chain.dart                                   | Dart       |        161 |          6 |         30 |        197 |
+| d:\flutter_apps\utilities\utility_tools\lib\models\saved_chain.g.dart                                 | Dart       |         95 |          4 |         13 |        112 |
+| d:\flutter_apps\utilities\utility_tools\lib\models\tool.dart                                          | Dart       |        103 |          9 |         18 |        130 |
+| d:\flutter_apps\utilities\utility_tools\lib\page\home.dart                                            | Dart       |      1,091 |         24 |         88 |      1,203 |
+| d:\flutter_apps\utilities\utility_tools\lib\services\ai_service.dart                                  | Dart       |        546 |         46 |        103 |        695 |
+| d:\flutter_apps\utilities\utility_tools\lib\services\app_settings.dart                                | Dart       |         72 |          4 |         15 |         91 |
+| d:\flutter_apps\utilities\utility_tools\lib\services\chain_persistence_service.dart                   | Dart       |        135 |         23 |         29 |        187 |
+| d:\flutter_apps\utilities\utility_tools\lib\services\file_converter.dart                              | Dart       |        455 |         17 |         57 |        529 |
+| d:\flutter_apps\utilities\utility_tools\lib\services\js_script_service.dart                           | Dart       |        190 |          3 |         29 |        222 |
+| d:\flutter_apps\utilities\utility_tools\lib\settings_help.md                                          | Markdown   |        173 |          0 |         21 |        194 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\ai_tools.dart                                  | Dart       |      3,262 |         61 |        183 |      3,506 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\base_ai_tool.dart                              | Dart       |         88 |         10 |         13 |        111 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\encoding_decoding_tool.dart                    | Dart       |        717 |         30 |         88 |        835 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\js_ai_tool.dart                                | Dart       |        387 |         12 |         50 |        449 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\js_tool.dart                                   | Dart       |        273 |         29 |         41 |        343 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\misc_tools.dart                                | Dart       |      1,473 |         49 |        200 |      1,722 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\splitter_tools.dart                            | Dart       |        240 |         11 |         28 |        279 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\text_analyzer_tools.dart                       | Dart       |        527 |         17 |         60 |        604 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\text_manipulation_tools.dart                   | Dart       |      7,685 |        307 |        928 |      8,920 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\text_tools.dart                                | Dart       |        747 |         63 |        118 |        928 |
+| d:\flutter_apps\utilities\utility_tools\lib\text_tools\text_transform_tools.dart                      | Dart       |        600 |         34 |         75 |        709 |
+| d:\flutter_apps\utilities\utility_tools\lib\theme\color_extensions.dart                               | Dart       |          6 |          0 |          2 |          8 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\category_toolbar.dart                             | Dart       |        374 |          9 |         27 |        410 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\chain_library_dialog.dart                         | Dart       |        442 |          6 |         32 |        480 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\chain_save_dialog.dart                            | Dart       |        208 |          4 |         21 |        233 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\chain_tools_panel.dart                            | Dart       |        591 |          3 |         23 |        617 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\input_text_field.dart                             | Dart       |         94 |          1 |         10 |        105 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\io_card.dart                                      | Dart       |      1,047 |         64 |         78 |      1,189 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\js_script_library_dialog.dart                     | Dart       |        896 |         33 |         81 |      1,010 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\settings_editor.dart                              | Dart       |      1,408 |         31 |         91 |      1,530 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\status_bar.dart                                   | Dart       |         89 |          2 |          8 |         99 |
+| d:\flutter_apps\utilities\utility_tools\lib\widgets\tool_bar.dart                                     | Dart       |        214 |          5 |         16 |        235 |
+| d:\flutter_apps\utilities\utility_tools\linux\CMakeLists.txt                                          | CMake      |        104 |          0 |         25 |        129 |
+| d:\flutter_apps\utilities\utility_tools\linux\flutter\CMakeLists.txt                                  | CMake      |         79 |          0 |         10 |         89 |
+| d:\flutter_apps\utilities\utility_tools\linux\flutter\generated_plugin_registrant.cc                  | C++        |         23 |          4 |          5 |         32 |
+| d:\flutter_apps\utilities\utility_tools\linux\flutter\generated_plugin_registrant.h                   | C++        |          5 |          5 |          6 |         16 |
+| d:\flutter_apps\utilities\utility_tools\linux\flutter\generated_plugins.cmake                         | CMake      |         24 |          0 |          6 |         30 |
+| d:\flutter_apps\utilities\utility_tools\linux\runner\CMakeLists.txt                                   | CMake      |         21 |          0 |          6 |         27 |
+| d:\flutter_apps\utilities\utility_tools\linux\runner\main.cc                                          | C++        |          5 |          0 |          2 |          7 |
+| d:\flutter_apps\utilities\utility_tools\linux\runner\my_application.cc                                | C++        |         83 |         21 |         27 |        131 |
+| d:\flutter_apps\utilities\utility_tools\linux\runner\my_application.h                                 | C++        |          7 |          7 |          5 |         19 |
+| d:\flutter_apps\utilities\utility_tools\macos\Flutter\GeneratedPluginRegistrant.swift                 | Swift      |         20 |          3 |          4 |         27 |
+| d:\flutter_apps\utilities\utility_tools\macos\RunnerTests\RunnerTests.swift                           | Swift      |          7 |          2 |          4 |         13 |
+| d:\flutter_apps\utilities\utility_tools\macos\Runner\AppDelegate.swift                                | Swift      |         11 |          0 |          3 |         14 |
+| d:\flutter_apps\utilities\utility_tools\macos\Runner\Assets.xcassets\AppIcon.appiconset\Contents.json | JSON       |         68 |          0 |          1 |         69 |
+| d:\flutter_apps\utilities\utility_tools\macos\Runner\Base.lproj\MainMenu.xib                          | XML        |        343 |          0 |          1 |        344 |
+| d:\flutter_apps\utilities\utility_tools\macos\Runner\MainFlutterWindow.swift                          | Swift      |         12 |          0 |          4 |         16 |
+| d:\flutter_apps\utilities\utility_tools\pubspec.yaml                                                  | YAML       |         59 |         48 |         16 |        123 |
+| d:\flutter_apps\utilities\utility_tools\test\widget_test.dart                                         | Dart       |         14 |         10 |          7 |         31 |
+| d:\flutter_apps\utilities\utility_tools\web\index.html                                                | HTML       |         19 |         15 |          5 |         39 |
+| d:\flutter_apps\utilities\utility_tools\web\manifest.json                                             | JSON       |         35 |          0 |          1 |         36 |
+| d:\flutter_apps\utilities\utility_tools\windows\CMakeLists.txt                                        | CMake      |         89 |          0 |         20 |        109 |
+| d:\flutter_apps\utilities\utility_tools\windows\flutter\CMakeLists.txt                                | CMake      |         98 |          0 |         12 |        110 |
+| d:\flutter_apps\utilities\utility_tools\windows\flutter\generated_plugin_registrant.cc                | C++        |         21 |          4 |          5 |         30 |
+| d:\flutter_apps\utilities\utility_tools\windows\flutter\generated_plugin_registrant.h                 | C++        |          5 |          5 |          6 |         16 |
+| d:\flutter_apps\utilities\utility_tools\windows\flutter\generated_plugins.cmake                       | CMake      |         25 |          0 |          6 |         31 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\CMakeLists.txt                                 | CMake      |         34 |          0 |          7 |         41 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\flutter_window.cpp                             | C++        |         49 |          7 |         16 |         72 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\flutter_window.h                               | C++        |         20 |          5 |          9 |         34 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\main.cpp                                       | C++        |         30 |          4 |         10 |         44 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\resource.h                                     | C++        |          9 |          6 |          2 |         17 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\utils.cpp                                      | C++        |         54 |          2 |         10 |         66 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\utils.h                                        | C++        |          8 |          6 |          6 |         20 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\win32_window.cpp                               | C++        |        210 |         24 |         55 |        289 |
+| d:\flutter_apps\utilities\utility_tools\windows\runner\win32_window.h                                 | C++        |         48 |         31 |         24 |        103 |
+| Total                                                                                                 |            |     27,151 |      1,243 |      3,049 |     31,443 |
++-------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
