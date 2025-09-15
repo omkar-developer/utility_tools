@@ -393,7 +393,7 @@ class _CategoryToolBarState extends State<CategoryToolBar> {
             : _showSettingsDialog,
         icon: Icon(
           widget.useEmbeddedSettings
-              ? (showEmbeddedSettings ? Icons.expand_less : Icons.tune)
+              ? (showEmbeddedSettings ? Icons.expand_less : Icons.settings)
               : Icons.settings,
           size: compact ? 16 : 18,
           color: showEmbeddedSettings

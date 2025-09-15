@@ -2,147 +2,263 @@
 
 A comprehensive collection of text processing, AI-powered, and utility tools built with Flutter. Available as both desktop application and web app.
 
+**🌐 Try it now:** [utility-tools.web.app](https://omkar-developer.github.io/utility_tools/)
+
 ## 🚀 Features
 
-### Core Categories
-- **Text Processing** - Format, clean, sort, find & replace, extract data
-- **AI-Powered Tools** - Summarization, translation, code analysis, image analysis  
-- **Text Conversion** - Case transforms, separators, table conversion
-- **Coding Utilities** - Encoding, hashing, encryption, regex tools
-- **Text Generation** - UUID, passwords, fake text, QR codes
-- **Image Tools** - PNG to ICO conversion, 9-patch UI generation, image editing
-- **Dynamic JS Tools** - Runtime-loadable JavaScript tools library
-
-### Key Tools
-
-![Text Processing](https://img.shields.io/badge/Text-Processing-blue)
-![AI Tools](https://img.shields.io/badge/AI-Powered-green)
-![Coding](https://img.shields.io/badge/Coding-Utilities-orange)
-![Image Tools](https://img.shields.io/badge/Image-Tools-purple)
-
-**Text Processing & Formatting:**
+### Text Processing & Formatting
 - Advanced Find & Replace with regex support
 - Text Statistics with readability scores
 - Line operations (numbering, cleanup, sorting)
 - Whitespace normalization and alignment
-- Prefix/suffix operations with flexible patterns
+- Case transforms and separator conversion
 
-**AI-Powered Features:**
+### AI-Powered Tools
 - Text Summarizer with customizable length and style
 - Multi-language Translator with tone control
 - Code Explainer & Documentation Generator
 - Image Analyzer for content extraction
-- Writing Assistant for grammar and style enhancement
+- Writing Assistant for grammar enhancement
 
-**Developer Tools:**
-- Encoding Hub (Base64, Hex, URL, HTML entities, etc.)
+### Developer Utilities
+- Encoding Hub (Base64, Hex, URL, HTML entities)
 - Hash & Crypto operations (SHA, MD5, HMAC, AES)
 - Regex Builder with pattern explanations
 - Code Converter between programming languages
-- Universal Code Documenter
+- Text Generation (UUID, passwords, fake data, QR codes)
 
-**Unique Features:**
-- **Live Updates** - Most tools auto-process as you type
-- **Markdown Support** - Full markdown input/output capability
-- **Chain Processing** - Use splitters to process data in batches
-- **Custom Settings** - Per-tool configuration with intuitive UI
+### Image Tools
+- PNG to ICO conversion
+- 9-patch UI generation
+- Basic image editing
+
+### Unique Features
+- **Live Updates** - Auto-process as you type
 - **JavaScript Library** - Add custom tools at runtime
+- **Chain Processing** - Process data in batches with splitters
+- **Markdown Support** - Full markdown input/output capability
 
 ## 📥 Installation
 
+### Web Application (Recommended)
+Access directly at: **[omkar-developer.github.io/utility_tools/](https://omkar-developer.github.io/utility_tools/)**
+
+No installation required - works in any modern browser!
+
 ### Desktop Application
-1. Download the latest release from the [Releases](../../releases) page
-2. Extract the ZIP file
-3. Run `utility_tools.exe` (Windows) or the appropriate executable for your platform
+1. Download from [Releases](../../releases) page
+2. Extract ZIP file
+3. Run executable for your platform
 
-### Web Application
-Access the web version directly in your browser - no installation required!
+## 🎯 Getting Started
 
-## 🎯 Usage
+### Basic Usage
+1. **Select a Tool**: Use the category dropdown to browse tools, then click any tool badge
+2. **Configure Settings**: Click the settings button (⚙️) next to the selected tool to customize options
+3. **Enter Input**: Type or paste your data in the input area
+4. **Process**: Click "Process" or enable live updates for real-time processing
 
-### Getting Started
-1. **Select Category** - Choose from the main categories (Text Processing, AI Tools, etc.)
-2. **Pick Tool** - Click on any tool badge to load it
-3. **Enter Input** - Type or paste your text/data in the input area
-4. **Process** - Click "Process" or let auto-processing handle it
-5. **Get Results** - View the processed output
+### Tool Settings
+Each tool has customizable settings accessible via the settings button (⚙️):
+- Click the settings button that appears after selecting a tool
+- Adjust parameters like output format, processing options, etc.
+- Settings are applied immediately with live updates enabled
+- Some tools have advanced options for fine-tuning behavior
 
-### Interface Features
-- **Live Update Button** - Toggle real-time processing as you type
-- **Settings Button** - Configure tool-specific options (gear icon)
-- **Global Settings** - Access app-wide settings from the main toolbar
-- **JS Tools Library** - Manage and add custom JavaScript tools
+### Live Updates
+Toggle the "Live Update" button to automatically process text as you type:
+- Enable for real-time results while editing
+- Disable for manual processing of large texts
+- Available for most text processing tools
 
-### Platform Differences
-- **Desktop Version** - Full feature set including local AI model support (Ollama)
-- **Web Version** - Cloud-based AI services, no local file access limitations
+### Chain Mode
+Create multi-step processing workflows:
+1. Click the chain button (🔗) in the toolbar
+2. Add multiple tools to create a processing sequence
+3. Tools execute in order, passing output to the next tool
+4. Save and load chains for repeated workflows
 
-## 🔧 Configuration
+## 🔧 AI Configuration
 
-### AI Services Setup
-Configure AI providers in Global Settings:
+### Required Setup for AI Tools
+1. Click **Settings** in the toolbar or sidebar
+2. Configure your AI provider:
 
-- **Ollama** (Desktop only): `http://localhost:11434/v1`
-- **OpenAI**: `https://api.openai.com/v1` 
+| Setting | Description | Example |
+|---------|-------------|---------|
+| **Base URL** | AI service endpoint | `https://api.openai.com/v1` |
+| **API Key** | Your service API key | `sk-...` (required for cloud services) |
+| **Model** | AI model to use | `gpt-3.5-turbo` or `qwen2.5-coder:7b` |
+| **Temperature** | Response creativity (0-1) | `0.7` |
+| **Max Tokens** | Response length limit | `2048` |
+
+### 🔑 API Key Storage
+
+Your AI API keys are stored **locally on your device** using [Hive](https://pub.dev/packages/hive), which maps to **IndexedDB** in the browser and a local storage file on desktop.  
+
+- Keys never leave your machine unless you explicitly use them for API calls.  
+- Other websites cannot access them due to browser **same-origin policies**.  
+- You can clear keys anytime by removing site data from your browser or resetting the app settings.  
+
+### Supported Providers
+
+#### Cloud Services (Web + Desktop)
+- **OpenAI**: `https://api.openai.com/v1`
 - **Groq**: `https://api.groq.com/openai/v1`
 - **Anthropic**: `https://api.anthropic.com/v1`
 - **OpenRouter**: `https://openrouter.ai/api/v1`
 
-### Customization
-- **Theme**: Choose between Light, Dark, or System themes
-- **JS Library**: Add custom JavaScript-powered tools
+#### Local Services (Desktop Only)
+- **Ollama**: `http://localhost:11434/v1` (no API key needed)
+
+### Setup Examples
+
+#### OpenAI Setup
+1. Get API key from [OpenAI Platform](https://platform.openai.com)
+2. Base URL: `https://api.openai.com/v1`
+3. Model: `gpt-3.5-turbo` or `gpt-4`
+4. Add your API key
+
+#### Ollama Setup (Desktop)
+1. Install [Ollama](https://ollama.ai) locally
+2. Run: `ollama pull qwen2.5-coder:7b`
+3. Base URL: `http://localhost:11434/v1`
+4. Model: `qwen2.5-coder:7b`
+5. Leave API key empty
 
 ## 🛠 JavaScript Tools Library
 
-The app includes a dynamic JavaScript tools system that allows you to:
-- Add custom tools at runtime
-- Share tools between users
-- Extend functionality without rebuilding the app
-- Create specialized processing tools for your workflows
+Extend functionality with custom JavaScript tools:
 
-Example JS tool structure:
+### Adding Custom Tools
+1. Click **Library** button in toolbar
+2. Create new tool or import existing
+3. Tools load automatically without restart
+
+### Example Tool Structure
 ```javascript
-var name = "My Custom Tool";
-var description = "Does something useful";
-var icon = "extension";
+var name = "Tool Name";
+var description = "Brief description of what the tool does";
+var icon = "edit"; // See icon list below
+var isOutputMarkdown = false;
+var isInputMarkdown = false;
+var canAcceptMarkdown = false;
+var supportsLiveUpdate = true;
+var allowEmptyInput = false; // Set true for generators/calculators
+
+var settings = {
+  "setting1": "default_value",
+  "number_setting": 10,
+  "boolean_setting": true
+};
+
+var settingsHints = {
+  "setting1": {
+    "type": "dropdown",
+    "label": "Setting Label",
+    "help": "Helpful description",
+    "options": [
+      {"value": "val1", "label": "Option 1"},
+      {"value": "val2", "label": "Option 2"}
+    ]
+  }
+};
 
 function execute(input, settings) {
-    return "Processed: " + input;
+  // Process input using settings
+  // Access settings: settings.setting1
+  var result = processInput(input, settings);
+  return result;
 }
 ```
 
-## 🏗 Built With
+### Features
+- Runtime tool loading
+- Community tool sharing
+- Specialized workflow tools
+- No app rebuild required
 
-- **Flutter** - Cross-platform UI framework
-- **Dart** - Programming language
-- **JSF** - JavaScript runtime for custom tools
-- **Various AI APIs** - OpenAI, Anthropic, Ollama, and more
-- **Material 3** - Modern UI design system
+## 💡 Usage Tips
+
+### Mobile/Tablet Interface
+- Categories and tools stack vertically on smaller screens
+- Chain panel opens as modal drawer
+- Settings panels adapt to screen size
+- Touch-friendly controls throughout
+
+### Keyboard Shortcuts
+- **F11**: Toggle fullscreen (web)
+- **Ctrl+R**: Refresh page (web)
+- Live updates work with copy/paste workflows
+
+### Performance
+- Large texts: Disable live updates for better performance
+- Streaming: AI tools show real-time output with cancel option
+- Memory: Tools process data locally when possible
 
 ## 📱 Platform Support
 
-- ✅ Windows Desktop
-- ✅ Linux Desktop  
-- ✅ macOS Desktop
-- ✅ Web Browser (Chrome, Firefox, Safari, Edge)
-- 📱 Mobile support planned
+| Platform | Status | Features |
+|----------|--------|----------|
+| **Web Browser** | ✅ Full | Cloud AI, all tools |
+| **Windows** | ✅ Full | Local AI support |
+| **Linux** | ✅ Full | Local AI support |
+| **macOS** | ✅ Full | Local AI support |
+| **Mobile** | 📱 Planned | Touch-optimized UI |
+
+## 🛠 Building & Development
+
+### Building for Windows
+```bash
+# Install dependencies
+flutter pub get
+
+# Build release version
+flutter build windows --release
+
+# Output location: build/windows/runner/Release/
+```
+
+### Building for Android
+```bash
+# Build APK for sideloading
+flutter build apk --release
+
+# Build App Bundle for Play Store
+flutter build appbundle --release
+```
+
+### Building for Web
+```bash
+# Build for web deployment
+flutter build web --release
+
+# Deploy to GitHub Pages or any web server
+```
+
+### Creating Custom Tools
+For developers interested in creating new tools, see our [Tool Development Guide](docs/tool_template.md).
+Javascript tool template: [Tool Development Guide](docs/js_tool_template.md).
 
 ## 🤝 Contributing
 
-Contributions are welcome! This includes:
+We welcome contributions:
 - Bug reports and feature requests
 - JavaScript tools for the community library
-- Code contributions and improvements
-- Documentation enhancements
+- Code improvements and documentation
+- Translation and accessibility enhancements
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🔮 Roadmap
 
 - Mobile app versions (iOS/Android)
+- Offline AI model support (web)
+- Advanced chain debugging tools
+- Plugin marketplace
 
 ---
 
-**Made with Flutter** | **Powered by AI** | **Open Source**
+**Built with Flutter** | **Powered by AI** | **Open Source**
