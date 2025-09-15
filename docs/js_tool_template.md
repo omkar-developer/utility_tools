@@ -6,20 +6,7 @@ This guide explains how to create custom tools for the Utility Tools application
 
 ### Using AI to Generate Tools
 The app includes an AI-powered **Tool Generator** that can create complete tools from natural language descriptions. its in AI Text Processing -> Tool Generator
-
-**Manual Prompt Template for AI Generation usign chat bots:**
-```
-Create a [JavaScript/Dart] tool for [category] that [description of functionality].
-
-Tool requirements:
-- Name: [Tool Name]
-- Purpose: [What it does]
-- Input: [What input it expects, or "none" for generators]
-- Settings: [What should be configurable]
-- Output: [What it produces]
-
-Example: "Create a JavaScript tool for Text Processing that converts text to alternating caps (LiKe ThIs). It should have settings for starting with uppercase/lowercase and preserving spaces."
-```
+You can copy and paste this entire file into chatbot and ask to generate a tool.
 
 ### Manual Creation
 You can also create tools manually using the templates below.

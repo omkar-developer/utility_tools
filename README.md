@@ -254,10 +254,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🔮 Roadmap
 
-- Mobile app versions (iOS/Android)
-- Offline AI model support (web)
-- Advanced chain debugging tools
-- Plugin marketplace
+- Adding more useful tools.
 
 ---
 
