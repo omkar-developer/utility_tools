@@ -8,7 +8,7 @@ A comprehensive collection of text processing, AI-powered, and utility tools bui
 
 #### Tool use Demo
 
-![Demo](docs/Dmo1.gif)
+![Demo](docs/Demo1.gif)
 
 ### AI-Powered Tool Generation
 Automatically generate new tools (example: a text repeater) using the built-in AI.  
