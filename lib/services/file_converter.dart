@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -76,19 +77,69 @@ class FileExporter {
 
   static Future<String> openFile({int maxLength = 50000}) async {
     final result = await FilePicker.platform.pickFiles();
-    if (result == null || result.files.single.path == null) return '';
+    if (result == null) return '';
 
-    final file = File(result.files.single.path!);
+    if (kIsWeb) {
+      // Web implementation
+      return _handleWebFile(result.files.single, maxLength);
+    } else {
+      // Desktop implementation
+      return _handleDesktopFile(result.files.single, maxLength);
+    }
+  }
+
+  static Future<String> _handleWebFile(PlatformFile file, int maxLength) async {
+    if (file.bytes == null) return '[Error: Could not read file]';
+
+    final bytes = file.bytes!;
+
+    // Check if binary (crude check on first 512 bytes or entire file if smaller)
+    final checkBytes = bytes.length > 512 ? bytes.sublist(0, 512) : bytes;
+    bool isBinary = checkBytes.any((b) => b == 0);
+
+    if (isBinary) {
+      // Check if it's an image by extension
+      final ext = p.extension(file.name).toLowerCase();
+      const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'];
+
+      if (imageExts.contains(ext)) {
+        final base64Str = base64Encode(bytes);
+        final mimeType = _getMimeType(ext);
+        return 'data:$mimeType;base64,$base64Str';
+      }
+
+      return '[Error: File appears to be binary, not text]';
+    }
+
+    // Handle as text file
+    try {
+      String content = utf8.decode(bytes);
+      if (content.length > maxLength) {
+        content = content.substring(0, maxLength) + '\n\n[...truncated]';
+      }
+      return content;
+    } catch (e) {
+      return '[Error: Could not decode file as UTF-8 text]';
+    }
+  }
+
+  static Future<String> _handleDesktopFile(
+    PlatformFile platformFile,
+    int maxLength,
+  ) async {
+    if (platformFile.path == null) return '';
+
+    final file = File(platformFile.path!);
     final raf = await file.open();
 
     // Read first 512 bytes to check if binary
     final headerBytes = await raf.read(512);
     await raf.close();
 
-    bool isBinary = headerBytes.any((b) => b == 0); // crude check
+    bool isBinary = headerBytes.any((b) => b == 0);
 
     if (isBinary) {
-      // check if it's an image by extension
+      // Check if it's an image by extension
       final ext = p.extension(file.path).toLowerCase();
       const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'];
 
@@ -96,15 +147,7 @@ class FileExporter {
         // Read whole file as bytes and convert to base64
         final bytes = await file.readAsBytes();
         final base64Str = base64Encode(bytes);
-        final mimeType = ext == '.png'
-            ? 'image/png'
-            : (ext == '.jpg' || ext == '.jpeg')
-            ? 'image/jpeg'
-            : ext == '.gif'
-            ? 'image/gif'
-            : ext == '.bmp'
-            ? 'image/bmp'
-            : 'image/webp';
+        final mimeType = _getMimeType(ext);
         return 'data:$mimeType;base64,$base64Str';
       }
 
@@ -134,8 +177,26 @@ class FileExporter {
       return '[Error: Could not read file as text]';
     }
 
-    if (truncated) buffer.write("\n\n[...truncated]");
+    if (truncated) buffer.write('\n\n[...truncated]');
     return buffer.toString();
+  }
+
+  static String _getMimeType(String ext) {
+    switch (ext) {
+      case '.png':
+        return 'image/png';
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.gif':
+        return 'image/gif';
+      case '.bmp':
+        return 'image/bmp';
+      case '.webp':
+        return 'image/webp';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   /// Enhanced save as PDF with better markdown support
@@ -342,7 +403,10 @@ class FileExporter {
             child: pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('• ', style: pw.TextStyle(fontSize: 12)),
+                pw.Text(
+                  '• ',
+                  style: pw.TextStyle(fontSize: 12),
+                ), // Fixed bullet character
                 pw.Expanded(
                   child: pw.Text(
                     line.substring(2),
@@ -375,6 +439,11 @@ class FileExporter {
             ),
           ),
         );
+      }
+      // Code blocks (basic support)
+      else if (line.startsWith('```')) {
+        // Skip the opening line, but you could enhance this to handle code blocks
+        continue;
       }
       // Regular paragraphs
       else {
@@ -487,6 +556,23 @@ class FileExporter {
         
         a:hover {
             text-decoration: underline;
+        }
+        
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1rem 0;
+        }
+        
+        th, td {
+            border: 1px solid var(--table-border);
+            padding: 0.5rem;
+            text-align: left;
+        }
+        
+        th {
+            background-color: var(--code-bg);
+            font-weight: 600;
         }
     </style>
 </head>
