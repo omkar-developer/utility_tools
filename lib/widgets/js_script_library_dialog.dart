@@ -1,13 +1,18 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:highlight/languages/javascript.dart';
 import 'package:utility_tools/models/js_script_model.dart';
 import 'package:utility_tools/services/ai_service.dart';
+import 'package:utility_tools/services/file_converter.dart';
 import 'package:utility_tools/services/js_script_service.dart';
 import 'package:utility_tools/text_tools/js_ai_tool.dart';
 import 'package:utility_tools/text_tools/js_tool.dart';
 import 'package:flutter_highlight/themes/github.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:code_text_field/code_text_field.dart';
+import 'package:archive/archive.dart';
 
 class JsScriptLibraryDialog extends StatefulWidget {
   const JsScriptLibraryDialog({super.key});
@@ -96,6 +101,21 @@ class _JsScriptLibraryDialogState extends State<JsScriptLibraryDialog> {
                   tooltip: 'Add New Script',
                 ),
                 IconButton(
+                  onPressed: () => _importScript(),
+                  icon: const Icon(Icons.upload_file),
+                  tooltip: 'Import Script',
+                ),
+                IconButton(
+                  onPressed: () => _importScriptsFromZip(context),
+                  icon: const Icon(Icons.drive_folder_upload),
+                  tooltip: 'Import scripts from ZIP',
+                ),
+                IconButton(
+                  onPressed: () => _exportScriptsAsZip(context, _scripts),
+                  icon: const Icon(Icons.download),
+                  tooltip: 'Export scripts as ZIP',
+                ),
+                IconButton(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close),
                 ),
@@ -172,6 +192,7 @@ class _JsScriptLibraryDialogState extends State<JsScriptLibraryDialog> {
                           onEdit: () => _showAddEditDialog(script),
                           onDelete: () => _deleteScript(script),
                           onDuplicate: () => _duplicateScript(script),
+                          onExport: () => _exportScript(context, script),
                         );
                       },
                     ),
@@ -227,11 +248,194 @@ class _JsScriptLibraryDialogState extends State<JsScriptLibraryDialog> {
     await JsScriptService.saveScript(duplicate);
     _loadScripts();
   }
+
+  void _importScript() async {
+    final str = await FileExporter.openFile(maxLength: 128000);
+    if (str.isEmpty) return;
+
+    try {
+      final lines = str.split('\n');
+      String? id;
+
+      // Check for UUID on the first line
+      if (lines.isNotEmpty && lines.first.startsWith('//uuid:')) {
+        id = lines.first.substring('//uuid:'.length).trim();
+        lines.removeAt(0); // remove the uuid comment
+      }
+
+      final scriptBody = lines.join('\n');
+      final script = JsScript.fromScript(scriptBody);
+
+      // Override with existing id if found
+      if (id != null && id.isNotEmpty) {
+        script.id = id;
+      }
+
+      await JsScriptService.saveScript(script);
+      _loadScripts();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Script imported successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error importing script: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _importScriptsFromZip(BuildContext context) async {
+    try {
+      final bytes = await FileExporter.openBinaryFile();
+      if (bytes == null) return;
+
+      final archive = ZipDecoder().decodeBytes(bytes);
+
+      final importedScripts = <JsScript>[];
+      final failedFiles = <String>[];
+
+      for (final file in archive) {
+        if (file.isFile && file.name.endsWith('.js')) {
+          try {
+            var content = String.fromCharCodes(file.content as List<int>);
+            String? extractedId;
+
+            // Check for //uuid:<id> at the very top
+            final uuidPattern = RegExp(r'^//uuid:([^\r\n]+)');
+            final match = uuidPattern.firstMatch(content);
+            if (match != null) {
+              extractedId = match.group(1);
+              // Remove uuid line before parsing as script
+              content = content.substring(match.end).trimLeft();
+            }
+
+            final script = JsScript.fromScript(content);
+
+            // Restore existing UUID if present, else generate new
+            if (extractedId != null) {
+              script.id = extractedId;
+            }
+
+            importedScripts.add(script);
+          } catch (e) {
+            failedFiles.add(file.name);
+          }
+        }
+      }
+
+      for (final script in importedScripts) {
+        await JsScriptService.saveScript(script); // overwrites if same id
+      }
+
+      _loadScripts();
+
+      if (context.mounted) {
+        String message = 'Imported ${importedScripts.length} scripts from ZIP';
+        if (failedFiles.isNotEmpty) {
+          message += '\nFailed to import: ${failedFiles.join(', ')}';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error importing scripts from ZIP: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+Future<void> _exportScript(BuildContext context, JsScript script) async {
+  try {
+    final filename = '${script.name}.js';
+
+    final content = '//uuid:${script.id}\n${script.script}';
+
+    await FileExporter.saveTextFile(content, filename);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('File saved as $filename'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving file: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+Future<void> _exportScriptsAsZip(
+  BuildContext context,
+  List<JsScript> scripts,
+) async {
+  try {
+    final archive = Archive();
+
+    for (final script in scripts) {
+      // Prepend UUID as comment at the top
+      final content = '//uuid:${script.id}\n${script.script}';
+      final bytes = Uint8List.fromList(content.codeUnits);
+
+      // Save inside "scripts_library/" folder
+      final filename = 'scripts_library/${script.name}.js';
+      archive.addFile(ArchiveFile(filename, bytes.length, bytes));
+    }
+
+    // Encode archive to ZIP
+    final zipData = Uint8List.fromList(ZipEncoder().encode(archive)!);
+
+    // Save the file
+    await FileExporter.saveBinaryFile(zipData, 'scripts_library.zip');
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Scripts saved as zip'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving Scripts: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 }
 
 class _ScriptCard extends StatelessWidget {
   final JsScript script;
   final VoidCallback onEdit;
+  final VoidCallback onExport;
   final VoidCallback onDelete;
   final VoidCallback onDuplicate;
 
@@ -240,6 +444,7 @@ class _ScriptCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onDuplicate,
+    required this.onExport,
   });
 
   @override
@@ -285,6 +490,9 @@ class _ScriptCard extends StatelessWidget {
                       case 'edit':
                         onEdit();
                         break;
+                      case 'export':
+                        onExport();
+                        break;
                       case 'duplicate':
                         onDuplicate();
                         break;
@@ -295,6 +503,7 @@ class _ScriptCard extends StatelessWidget {
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    const PopupMenuItem(value: 'export', child: Text('Export')),
                     const PopupMenuItem(
                       value: 'duplicate',
                       child: Text('Duplicate'),

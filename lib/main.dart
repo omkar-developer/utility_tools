@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:utility_tools/classes/js_change_notifier.dart';
 import 'package:utility_tools/widgets/js_script_library_dialog.dart';
 import 'package:window_manager/window_manager.dart';
@@ -126,7 +127,6 @@ Future<void> main() async {
   if (!kIsWeb) {
     // Desktop-only: initialize JS scripts & window manager
     await JsScriptService.init();
-    await JsScriptService.importDefaultScripts();
 
     await windowManager.ensureInitialized();
 
@@ -148,7 +148,6 @@ Future<void> main() async {
   } else {
     // Web-only: load default scripts from assets if needed
     await JsScriptService.init();
-    await JsScriptService.importDefaultScripts();
   }
 
   // Register syntax highlighting
@@ -427,6 +426,20 @@ class _HomePageState extends State<HomePage> with WindowListener {
                 label: 'About',
                 onTap: () => _showAboutDialog(context),
               ),
+              _buildSidebarItem(
+                icon: Icons.help_center_outlined,
+                label: 'Help',
+                onTap: () async {
+                  const url =
+                      'https://github.com/omkar-developer/utility_tools#readme';
+                  if (await canLaunchUrl(Uri.parse(url))) {
+                    await launchUrl(
+                      Uri.parse(url),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  }
+                },
+              ),
             ],
           ),
         ],
@@ -549,6 +562,20 @@ class _HomePageState extends State<HomePage> with WindowListener {
             icon: const Icon(Icons.settings),
             tooltip: 'Settings',
             onPressed: _showGlobalSettingsDialog,
+          ),
+          IconButton(
+            onPressed: () async {
+              const url =
+                  'https://github.com/omkar-developer/utility_tools#readme';
+              if (await canLaunchUrl(Uri.parse(url))) {
+                await launchUrl(
+                  Uri.parse(url),
+                  mode: LaunchMode.externalApplication,
+                );
+              }
+            },
+            tooltip: 'Help',
+            icon: const Icon(Icons.help_outline),
           ),
           // Info button
           IconButton(

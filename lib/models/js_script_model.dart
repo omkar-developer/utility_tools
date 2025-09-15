@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'package:uuid/uuid.dart';
 
 part 'js_script_model.g.dart';
 
@@ -47,7 +48,7 @@ class JsScript extends HiveObject {
     final description = extractDescriptionFromScript(scriptContent);
 
     return JsScript(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: Uuid().v4(),
       name: name,
       script: scriptContent,
       type: type,

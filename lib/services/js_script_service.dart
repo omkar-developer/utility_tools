@@ -127,7 +127,7 @@ var canAcceptMarkdown = false;
 var supportsLiveUpdate = true;
 
 function execute(input, settings) {
-  return "🔊 Echo: " + input + "\\n\\nSettings: " + JSON.stringify(settings);
+  return "Echo: " + input + "\\n\\nSettings: " + JSON.stringify(settings);
 }
 ''',
         'category': 'Text Processing',
@@ -197,7 +197,7 @@ function buildAISystemPrompt(input, settings) {
   
   var styleInstructions = {
     "paragraph": "Format as flowing paragraphs",
-    "bullet_points": "Format as bullet points with • prefix",
+    "bullet_points": "Format as bullet points with - prefix",
     "numbered": "Format as a numbered list"
   };
 

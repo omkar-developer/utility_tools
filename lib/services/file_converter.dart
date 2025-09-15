@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:io' as io;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -75,6 +75,28 @@ class FileExporter {
     return savedPath;
   }
 
+  static Future<Uint8List?> openBinaryFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: true, // ensures web returns bytes
+    );
+
+    if (result == null) return null;
+
+    final file = result.files.single;
+
+    if (kIsWeb) {
+      // Web: just return bytes directly
+      if (file.bytes == null) return null;
+      return file.bytes!;
+    } else {
+      // Desktop: read full file from path
+      if (file.path == null) return null;
+      final io.File f = io.File(file.path!);
+      return await f.readAsBytes();
+    }
+  }
+
   static Future<String> openFile({int maxLength = 50000}) async {
     final result = await FilePicker.platform.pickFiles();
     if (result == null) return '';
@@ -115,7 +137,7 @@ class FileExporter {
     try {
       String content = utf8.decode(bytes);
       if (content.length > maxLength) {
-        content = content.substring(0, maxLength) + '\n\n[...truncated]';
+        content = '${content.substring(0, maxLength)}\n\n[...truncated]';
       }
       return content;
     } catch (e) {
@@ -607,7 +629,7 @@ $content
       dialogTitle: 'Save Text File',
       fileName: filename,
       type: FileType.custom,
-      allowedExtensions: ['txt'],
+      allowedExtensions: ['Any'],
       bytes: bytes,
     );
   }

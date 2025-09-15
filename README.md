@@ -4,6 +4,17 @@ A comprehensive collection of text processing, AI-powered, and utility tools bui
 
 **🌐 Try it now:** [utility-tools.web.app](https://omkar-developer.github.io/utility_tools/)
 
+## Demos
+
+#### Tool use Demo
+
+![Demo](docs/demo1.gif)
+
+### AI-Powered Tool Generation
+Automatically generate new tools (example: a text repeater) using the built-in AI.  
+![Demo 2](docs/demo2.gif)
+
+
 ## 🚀 Features
 
 ### Text Processing & Formatting
