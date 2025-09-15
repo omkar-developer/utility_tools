@@ -140,7 +140,7 @@ Extend functionality with custom JavaScript tools:
 var name = "Tool Name";
 var description = "Brief description of what the tool does";
 var icon = "edit"; // See icon list below
-var isOutputMarkdown = false;
+var isOutputMarkdown = true;
 var isInputMarkdown = false;
 var canAcceptMarkdown = false;
 var supportsLiveUpdate = true;
