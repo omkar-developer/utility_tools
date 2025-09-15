@@ -234,9 +234,7 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
         } catch (e) {
           content = child; // Fall back to original if detection fails
         }
-      }
-
-      if (wrapCodeText) {
+      } else if (wrapCodeText) {
         content = LayoutBuilder(
           builder: (context, constraints) {
             return ConstrainedBox(
@@ -260,8 +258,6 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
             );
           },
         );
-      } else {
-        content = child;
       }
 
       return Stack(

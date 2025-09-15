@@ -866,7 +866,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
     showAboutDialog(
       context: context,
       applicationName: 'Utility Tools',
-      applicationVersion: '1.2.0',
+      applicationVersion: '1.3.0',
       applicationIcon: Image.asset(
         "assets/icons/icon.png",
         width: 64,
