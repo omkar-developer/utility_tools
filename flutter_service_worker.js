@@ -53,7 +53,7 @@ const RESOURCES = {"canvaskit/skwasm.js": "1ef3ea3a0fec4569e5d531da25f34095",
 "assets/packages/flutter_math_fork/lib/katex_fonts/fonts/KaTeX_SansSerif-Bold.ttf": "ad0a28f28f736cf4c121bcb0e719b88a",
 "assets/packages/flutter_math_fork/lib/katex_fonts/fonts/KaTeX_Fraktur-Regular.ttf": "dede6f2c7dad4402fa205644391b3a94",
 "assets/packages/gpt_markdown/lib/fonts/JetBrainsMono-Regular.ttf": "d09f65145228b709a10fa0a06d522d89",
-"flutter_bootstrap.js": "97d46682944e96e05f1bd1fa05a704b4",
+"flutter_bootstrap.js": "bb89a5c620b2702bf457f86cb5256ab8",
 "favicon.png": "f64a1bcec24a0da08cf00097656f3ba6",
 "index.html": "cef389eb36df492115196a0a4ca6cc4f",
 "/": "cef389eb36df492115196a0a4ca6cc4f"};
