@@ -58,6 +58,8 @@ class _HomeState extends State<Home> {
   int _executionCounter = 0;
   List<ChainedTool> _chainedTools = [];
 
+  bool wrapCodeText = false;
+
   String inputStatus = '';
 
   Map<String, List<Tool Function()>> toolCategories = {};
@@ -937,6 +939,10 @@ class _HomeState extends State<Home> {
                   selectedTool!.name == 'Tool Generator',
               content: output,
               scrollController: scrollController,
+              wrapCodeText: wrapCodeText,
+              onWrapToggled: (value) => setState(() {
+                wrapCodeText = value;
+              }),
               onLivePreviewChanged: (value) => setState(() {
                 livePreview = value;
                 if (!chainModeEnabled) _executeTool();
@@ -995,6 +1001,10 @@ class _HomeState extends State<Home> {
             isStreaming: _isStreaming,
             content: output,
             scrollController: scrollController,
+            wrapCodeText: wrapCodeText,
+            onWrapToggled: (value) => setState(() {
+              wrapCodeText = value;
+            }),
             onLivePreviewChanged: (value) => setState(() {
               livePreview = value;
               if (!chainModeEnabled) _executeTool();

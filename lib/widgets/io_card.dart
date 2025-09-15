@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:markdown_widget/config/configs.dart';
+import 'package:markdown_widget/widget/all.dart';
 import 'package:markdown_widget/widget/blocks/leaf/code_block.dart';
 import 'package:flutter_highlight/themes/github.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
@@ -39,6 +40,8 @@ class IOCard extends StatelessWidget {
   final String? statusMessage;
   final VoidCallback? onSaveJS;
   final bool showSaveJSButton;
+  final bool wrapCodeText;
+  final ValueChanged<bool>? onWrapToggled;
 
   final testText = """
 On a cool autumn morning, the sky was painted in hues of orange and pink, with the sun barely peeking above the horizon. The forest, still wrapped in the silence of dawn, held a peacefulness that seemed untouched by time. A light mist hung over the ground, curling around the trees like a soft blanket. Birds began to stir, their songs adding a delicate melody to the stillness.
@@ -73,6 +76,8 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
     this.statusMessage,
     this.onSaveJS,
     this.showSaveJSButton = false,
+    this.wrapCodeText = false,
+    this.onWrapToggled,
   });
 
   Future<void> handlePasteAction(TextEditingController? controller) async {
@@ -229,6 +234,34 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
         } catch (e) {
           content = child; // Fall back to original if detection fails
         }
+      }
+
+      if (wrapCodeText) {
+        content = LayoutBuilder(
+          builder: (context, constraints) {
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth, // enforce wrapping
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+                    50,
+                  ),
+                  borderRadius: BorderRadius.circular(8.0),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withAlpha(50),
+                    width: 1.0,
+                  ),
+                ),
+                child: ProxyRichText(TextSpan(text: text)),
+              ), // keep original styles and behavior
+            );
+          },
+        );
+      } else {
+        content = child;
       }
 
       return Stack(
@@ -1022,6 +1055,15 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
                       onPressed: enableActions && content.isNotEmpty
                           ? () => _handleAction(context, 'copy')
                           : null,
+                    ),
+                  ),
+                  Tooltip(
+                    message: wrapCodeText
+                        ? 'Disable text wrap'
+                        : 'Enable text wrap',
+                    child: IconButton(
+                      icon: Icon(wrapCodeText ? Icons.wrap_text : Icons.code),
+                      onPressed: () => onWrapToggled?.call(!wrapCodeText),
                     ),
                   ),
                   Tooltip(
