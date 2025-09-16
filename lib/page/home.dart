@@ -126,10 +126,19 @@ class _HomeState extends State<Home> {
     appendCategories(getEncodingDecodingTools());
     appendCategories(getMiscTools());
 
-    final tools = JsScriptService.getJsTools();
-    // Add dynamic JS tools (after Hive box is ready)
-    appendCategories(tools);
-    appendCategories(JsScriptService.getJsAiTools());
+    try {
+      appendCategories(JsScriptService.getJsTools());
+      appendCategories(JsScriptService.getJsAiTools());
+    } catch (e) {
+      if (e is ScriptLoadingException) {
+        _updateStatus(
+          'Error loading tool: ${e.toolName}. Error: ${e.errorMessage}',
+          ToolStatus.error,
+        );
+      } else {
+        _updateStatus('Unknown error loading tools: $e', ToolStatus.error);
+      }
+    }
   }
 
   void onLibChange() => setState(() {
@@ -721,6 +730,7 @@ class _HomeState extends State<Home> {
               onToolSettingsChanged: _onToolSettingsChanged,
               useEmbeddedSettings: true,
               showSettings: !showSettings,
+              onError: (message) => print(message),
             )
           else
             Container(
@@ -816,6 +826,7 @@ class _HomeState extends State<Home> {
               onToolSettingsChanged: _onToolSettingsChanged,
               useEmbeddedSettings: true,
               showSettings: !showSettings,
+              onError: (message) => print(message),
             ),
           )
         else

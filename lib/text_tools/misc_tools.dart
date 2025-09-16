@@ -3526,6 +3526,393 @@ flutter:
   }
 }
 
+class CustomControlTestTool extends Tool {
+  CustomControlTestTool()
+    : super(
+        name: 'Custom Control Test',
+        description: 'A test tool demonstrating custom controls in settings',
+        icon: Icons.construction,
+        isOutputMarkdown: true,
+        settings: {
+          'normal_text': 'Hello World',
+          'normal_number': 42,
+          'normal_bool': true,
+          'custom_color_picker': {'r': 255, 'g': 100, 'b': 50, 'a': 1.0},
+          'custom_rating': 3,
+          'custom_complex_picker': {
+            'mode': 'advanced',
+            'values': [1, 2, 3],
+            'metadata': {'created': '2024-01-01'},
+          },
+        },
+        settingsHints: {
+          'normal_text': {
+            'label': 'Regular Text Input',
+            'help': 'This is a standard text control',
+            'placeholder': 'Enter some text...',
+          },
+          'normal_number': {
+            'label': 'Regular Number',
+            'help': 'Standard number input',
+            'type': 'number',
+            'min': 0,
+            'max': 100,
+          },
+          'normal_bool': {
+            'label': 'Regular Boolean',
+            'help': 'Standard switch control',
+          },
+          'custom_color_picker': {
+            'type': 'custom',
+            'label': 'Custom RGBA Color Picker',
+            'help': 'A custom control that picks RGBA colors',
+            'show_label': true, // Keep the label
+            'builder': _buildCustomColorPicker,
+          },
+          'custom_rating': {
+            'type': 'custom',
+            'show_label': false, // No label - control handles its own
+            'builder': _buildCustomRatingPicker,
+          },
+          'custom_complex_picker': {
+            'type': 'custom',
+            'label': 'Complex Data Picker',
+            'help': 'Demonstrates handling complex data types',
+            'show_label': true,
+            'builder': _buildComplexPicker,
+            // Custom configuration for this control
+            'available_modes': ['basic', 'advanced', 'expert'],
+            'max_values': 5,
+          },
+        },
+      );
+
+  @override
+  Future<ToolResult> execute(String input) async {
+    final buffer = StringBuffer();
+    buffer.writeln('# Custom Control Test Results\n');
+    buffer.writeln('**Input:** $input\n');
+    buffer.writeln('## Current Settings:\n');
+
+    settings.forEach((key, value) {
+      buffer.writeln('- **$key**: `${value.toString()}`');
+    });
+
+    buffer.writeln('\n## Analysis:\n');
+
+    // Analyze the custom control values
+    final colorData = settings['custom_color_picker'] as Map<String, dynamic>;
+    buffer.writeln(
+      '- Custom color: RGB(${colorData['r']}, ${colorData['g']}, ${colorData['b']}) Alpha: ${colorData['a']}',
+    );
+
+    final rating = settings['custom_rating'] as int;
+    buffer.writeln(
+      '- Rating: ${"★" * rating}${"☆" * (5 - rating)} ($rating/5)',
+    );
+
+    final complexData =
+        settings['custom_complex_picker'] as Map<String, dynamic>;
+    buffer.writeln('- Complex picker mode: ${complexData['mode']}');
+    buffer.writeln('- Selected values: ${complexData['values']}');
+    buffer.writeln('- Metadata: ${complexData['metadata']}');
+
+    return ToolResult(output: buffer.toString(), status: 'success');
+  }
+
+  // Custom RGBA Color Picker
+  static Widget _buildCustomColorPicker(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function updateSetting,
+  ) {
+    final colorData =
+        value as Map<String, dynamic>? ??
+        {'r': 255, 'g': 100, 'b': 50, 'a': 1.0};
+
+    final r = (colorData['r'] ?? 255).toInt();
+    final g = (colorData['g'] ?? 100).toInt();
+    final b = (colorData['b'] ?? 50).toInt();
+    final a = (colorData['a'] ?? 1.0).toDouble();
+
+    final color = Color.fromARGB((a * 255).round(), r, g, b);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Color preview
+          Container(
+            width: double.infinity,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.shade400),
+            ),
+            child: Center(
+              child: Text(
+                'RGBA($r, $g, $b, ${a.toStringAsFixed(2)})',
+                style: TextStyle(
+                  color: color.computeLuminance() > 0.5
+                      ? Colors.black
+                      : Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // RGB Sliders
+          _buildColorSlider('R', r.toDouble(), Colors.red, (val) {
+            updateSetting(key, {...colorData, 'r': val.round()});
+          }),
+          _buildColorSlider('G', g.toDouble(), Colors.green, (val) {
+            updateSetting(key, {...colorData, 'g': val.round()});
+          }),
+          _buildColorSlider('B', b.toDouble(), Colors.blue, (val) {
+            updateSetting(key, {...colorData, 'b': val.round()});
+          }),
+          _buildColorSlider('A', a, Colors.grey, (val) {
+            updateSetting(key, {...colorData, 'a': val});
+          }, max: 1.0),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildColorSlider(
+    String label,
+    double value,
+    Color color,
+    Function(double) onChanged, {
+    double max = 255.0,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 20,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Slider(
+              value: value,
+              min: 0,
+              max: max,
+              divisions: max == 1.0 ? 100 : max.toInt(),
+              activeColor: color,
+              onChanged: onChanged,
+            ),
+          ),
+          SizedBox(
+            width: 40,
+            child: Text(
+              max == 1.0 ? value.toStringAsFixed(2) : value.round().toString(),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Custom Star Rating Picker (no label - handles its own)
+  static Widget _buildCustomRatingPicker(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function updateSetting,
+  ) {
+    final currentRating = (value as int?) ?? 0;
+
+    return Card(
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Rate Your Experience',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(5, (index) {
+                return GestureDetector(
+                  onTap: () => updateSetting(key, index + 1),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      index < currentRating ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                      size: 32,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              currentRating == 0
+                  ? 'No rating selected'
+                  : '$currentRating out of 5 stars',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Complex Data Picker
+  static Widget _buildComplexPicker(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function updateSetting,
+  ) {
+    final complexData =
+        value as Map<String, dynamic>? ??
+        {'mode': 'basic', 'values': <int>[], 'metadata': <String, dynamic>{}};
+
+    final availableModes =
+        hint['available_modes'] as List<String>? ?? ['basic', 'advanced'];
+    final maxValues = hint['max_values'] as int? ?? 3;
+
+    final currentMode = complexData['mode'] as String? ?? 'basic';
+    final currentValues = List<int>.from(complexData['values'] ?? []);
+    final metadata = complexData['metadata'] as Map<String, dynamic>? ?? {};
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey.shade50,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Mode selector
+          const Text('Mode:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          DropdownButton<String>(
+            value: currentMode,
+            isExpanded: true,
+            items: availableModes
+                .map(
+                  (mode) => DropdownMenuItem(
+                    value: mode,
+                    child: Text(mode.toUpperCase()),
+                  ),
+                )
+                .toList(),
+            onChanged: (newMode) {
+              if (newMode != null) {
+                updateSetting(key, {
+                  ...complexData,
+                  'mode': newMode,
+                  'metadata': {
+                    ...metadata,
+                    'lastModeChange': DateTime.now().toIso8601String(),
+                  },
+                });
+              }
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          // Values selector
+          Text(
+            'Values (max $maxValues):',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: List.generate(10, (index) {
+              final value = index + 1;
+              final isSelected = currentValues.contains(value);
+
+              return FilterChip(
+                label: Text(value.toString()),
+                selected: isSelected,
+                onSelected: currentValues.length >= maxValues && !isSelected
+                    ? null
+                    : (selected) {
+                        List<int> newValues = List.from(currentValues);
+                        if (selected) {
+                          newValues.add(value);
+                        } else {
+                          newValues.remove(value);
+                        }
+                        newValues.sort();
+
+                        updateSetting(key, {
+                          ...complexData,
+                          'values': newValues,
+                          'metadata': {
+                            ...metadata,
+                            'lastValueChange': DateTime.now().toIso8601String(),
+                          },
+                        });
+                      },
+              );
+            }),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Status display
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Current: $currentMode mode, ${currentValues.length}/$maxValues values',
+                ),
+                if (currentValues.isNotEmpty)
+                  Text('Selected: ${currentValues.join(", ")}'),
+                if (metadata.isNotEmpty)
+                  Text(
+                    'Last update: ${metadata['lastValueChange'] ?? metadata['lastModeChange'] ?? 'unknown'}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 Map<String, List<Tool Function()>> getMiscTools() {
   return {
     'Image Tools': [
@@ -3534,6 +3921,10 @@ Map<String, List<Tool Function()>> getMiscTools() {
       () => PwaIconTool(),
       () => NinePatchDecoratorTool(),
     ],
-    'Misc': [() => ColorPaletteGenerator(), () => NinePatchUITool()],
+    'Misc': [
+      () => ColorPaletteGenerator(),
+      () => NinePatchUITool(),
+      () => CustomControlTestTool(),
+    ],
   };
 }

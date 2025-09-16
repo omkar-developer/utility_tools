@@ -73,6 +73,13 @@ class _SettingsEditorState extends State<SettingsEditor> {
     final label = hintMap?['label'] as String? ?? _formatLabel(key);
     final helpText = hintMap?['help'] as String?;
 
+    final showLabel = hintMap?['show_label'] ?? true; // Default to true
+
+    if (!showLabel) {
+      // Skip label wrapper, return just the control
+      return _buildControl(context, key, value, hintMap ?? {});
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -136,6 +143,13 @@ class _SettingsEditorState extends State<SettingsEditor> {
     final label = hintMap?['label'] as String? ?? _formatLabel(key);
     final helpText = hintMap?['help'] as String?;
 
+    final showLabel = hintMap?['show_label'] ?? true; // Default to true
+
+    if (!showLabel) {
+      // Skip label wrapper, return just the control
+      return _buildControl(context, key, value, hintMap ?? {});
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.start,
@@ -151,13 +165,16 @@ class _SettingsEditorState extends State<SettingsEditor> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 18,
+                    child: Tooltip(
+                      message: label,
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 18,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (helpText != null) ...[
@@ -253,6 +270,20 @@ class _SettingsEditorState extends State<SettingsEditor> {
           return _buildRangeControl(context, key, value, hint);
         case 'file':
           return _buildFileControl(context, key, value, hint);
+        case 'custom':
+          final builder =
+              hint['builder']
+                  as Widget Function(
+                    BuildContext,
+                    String,
+                    dynamic,
+                    Map<String, dynamic>,
+                    Function,
+                  )?;
+          if (builder != null) {
+            return builder(context, key, value, hint, _updateSetting);
+          }
+          return _buildFallbackControl(key, value);
         default:
           return _buildFallbackControl(key, value);
       }

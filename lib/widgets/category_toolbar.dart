@@ -12,6 +12,7 @@ class CategoryToolBar extends StatefulWidget {
   final bool useEmbeddedSettings;
   final bool liveUpdate;
   final bool showSettings;
+  final void Function(String message)? onError;
 
   const CategoryToolBar({
     super.key,
@@ -23,6 +24,7 @@ class CategoryToolBar extends StatefulWidget {
     this.liveUpdate = false,
     this.hiddenCategories = const ["Splitter"],
     this.showSettings = true,
+    this.onError,
   });
 
   @override
@@ -68,10 +70,17 @@ class _CategoryToolBarState extends State<CategoryToolBar> {
     return List.generate(factories.length, (index) {
       final cacheKey = '$selectedCategory-$index';
       if (!_toolCache.containsKey(cacheKey)) {
-        _toolCache[cacheKey] = factories[index]();
+        try {
+          _toolCache[cacheKey] = factories[index]();
+        } catch (e, st) {
+          widget.onError?.call(
+            'Failed to load tool from factory $index in category $selectedCategory. Error: $e\n$st',
+          );
+          return null;
+        }
       }
-      return _toolCache[cacheKey]!;
-    });
+      return _toolCache[cacheKey];
+    }).whereType<Tool>().toList(); // filters out nulls
   }
 
   void debugTools(Map<String, List<Tool Function()>> toolsByCategory) {

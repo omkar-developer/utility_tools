@@ -5,6 +5,18 @@ import 'package:utility_tools/models/js_script_model.dart';
 import 'package:utility_tools/text_tools/js_tool.dart';
 import 'package:utility_tools/text_tools/js_ai_tool.dart';
 
+// Custom exception for script loading failures
+class ScriptLoadingException implements Exception {
+  final String toolName;
+  final String errorMessage;
+
+  ScriptLoadingException(this.toolName, this.errorMessage);
+
+  @override
+  String toString() =>
+      'ScriptLoadingException: Failed to load tool "$toolName". Error: $errorMessage';
+}
+
 class JsScriptService {
   static const String _boxName = 'js_scripts';
   static Box<JsScript>? _box;
@@ -74,7 +86,12 @@ class JsScriptService {
       if (!toolsByCategory.containsKey(category)) {
         toolsByCategory[category] = [];
       }
-      toolsByCategory[category]!.add(() => JsTool.fromScript(script.script));
+      try {
+        toolsByCategory[category]!.add(() => JsTool.fromScript(script.script));
+      } catch (e) {
+        // Rethrow with more specific information about which tool failed
+        throw ScriptLoadingException(script.name, e.toString());
+      }
     }
 
     return toolsByCategory;
@@ -89,7 +106,14 @@ class JsScriptService {
       if (!toolsByCategory.containsKey(category)) {
         toolsByCategory[category] = [];
       }
-      toolsByCategory[category]!.add(() => JsAiTool.fromScript(script.script));
+      try {
+        toolsByCategory[category]!.add(
+          () => JsAiTool.fromScript(script.script),
+        );
+      } catch (e) {
+        // Rethrow with more specific information about which tool failed
+        throw ScriptLoadingException(script.name, e.toString());
+      }
     }
 
     return toolsByCategory;
