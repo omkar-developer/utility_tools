@@ -613,8 +613,11 @@ $content
         .replaceAll("'", '&#x27;');
   }
 
-  static Future<void> saveBinaryFile(Uint8List bytes, String filename) async {
-    await FilePicker.platform.saveFile(
+  static Future<String?> saveBinaryFile(
+    Uint8List bytes,
+    String filename,
+  ) async {
+    return await FilePicker.platform.saveFile(
       dialogTitle: 'Save File',
       fileName: filename,
       type: FileType.custom,
@@ -623,9 +626,9 @@ $content
     );
   }
 
-  static Future<void> saveTextFile(String content, String filename) async {
+  static Future<String?> saveTextFile(String content, String filename) async {
     final Uint8List bytes = Uint8List.fromList(utf8.encode(content));
-    await FilePicker.platform.saveFile(
+    return await FilePicker.platform.saveFile(
       dialogTitle: 'Save Text File',
       fileName: filename,
       type: FileType.custom,

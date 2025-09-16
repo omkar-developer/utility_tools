@@ -3,11 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:markdown_widget/config/configs.dart';
+import 'package:markdown_widget/config/markdown_generator.dart';
 import 'package:markdown_widget/widget/all.dart';
-import 'package:markdown_widget/widget/blocks/leaf/code_block.dart';
 import 'package:flutter_highlight/themes/github.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
-import 'package:markdown_widget/widget/markdown_block.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
@@ -15,6 +14,497 @@ import 'package:utility_tools/services/file_converter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:utility_tools/widgets/input_text_field.dart';
 import 'package:pasteboard/pasteboard.dart';
+import 'package:markdown/markdown.dart' as m;
+
+String _cleanBase64Static(String base64Text) {
+  return base64Text
+      .replaceAll(RegExp(r'data:image/[^;]+;base64,'), '')
+      .replaceAll(RegExp(r'\s+'), '');
+}
+
+String _detectImageFormatFromBytes(Uint8List bytes) {
+  if (bytes.length >= 4) {
+    if (bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'png';
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return 'jpg';
+    }
+    if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) {
+      return 'gif';
+    }
+    if (bytes[0] == 0x42 && bytes[1] == 0x4D) return 'bmp';
+    if (bytes.length > 11 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return 'webp';
+    }
+    if (bytes[0] == 0x00 &&
+        bytes[1] == 0x00 &&
+        bytes[2] == 0x01 &&
+        bytes[3] == 0x00) {
+      return 'ico';
+    }
+  }
+  return 'unknown';
+}
+
+class Base64ImageSyntax extends m.InlineSyntax {
+  Base64ImageSyntax()
+    : super(
+        // Updated regex to handle both regular images and SVG
+        r'!\[([^\]]*)\]\((data:image\/[a-zA-Z0-9.+-]+(?:;base64)?[;,][A-Za-z0-9+/=]+)\)',
+      );
+
+  @override
+  bool onMatch(m.InlineParser parser, Match match) {
+    final altText = match.group(1) ?? '';
+    final dataUrl = match.group(2) ?? '';
+
+    final el = m.Element.empty('base64image');
+    el.attributes['alt'] = altText;
+    el.attributes['src'] = dataUrl;
+
+    parser.addNode(el);
+    return true;
+  }
+}
+
+class Base64ImageNode extends SpanNode {
+  final Map<String, String> attributes;
+  final String textContent;
+  final MarkdownConfig config;
+
+  Base64ImageNode(this.attributes, this.textContent, this.config);
+
+  @override
+  InlineSpan build() {
+    final style = parentStyle ?? config.p.textStyle;
+    final src = attributes['src'] ?? '';
+    final alt = attributes['alt'] ?? '';
+
+    if (!src.startsWith('data:image/')) {
+      return TextSpan(text: alt.isNotEmpty ? alt : textContent, style: style);
+    }
+
+    try {
+      // Check if it's SVG
+      if (src.contains('data:image/svg+xml')) {
+        // Handle SVG data URL
+        final parts = src.split(',');
+        if (parts.length == 2) {
+          final svgContent = utf8.decode(base64Decode(parts[1]));
+          return WidgetSpan(
+            child: SizedBox(
+              height: 200, // or desired height
+              child: SvgPicture.string(svgContent, fit: BoxFit.contain),
+            ),
+          );
+        }
+      }
+
+      // Handle regular base64 images
+      final clean = _cleanBase64Static(src);
+      final bytes = base64Decode(clean);
+      final format = _detectImageFormatFromBytes(bytes);
+      return WidgetSpan(
+        child: UnifiedBase64ImageViewer(bytes: bytes, format: format),
+      );
+    } catch (e) {
+      return TextSpan(
+        text: '[Invalid image]',
+        style: style.copyWith(color: Colors.red),
+      );
+    }
+  }
+}
+
+final base64ImageGenerator2 = SpanNodeGeneratorWithTag(
+  tag: 'base64image', // Changed from 'base64img' to match your syntax
+  generator: (element, config, visitor) {
+    return Base64ImageNode(element.attributes, element.textContent, config);
+  },
+);
+
+class UnifiedBase64ImageViewer extends StatelessWidget {
+  final Uint8List bytes;
+  final String format;
+
+  const UnifiedBase64ImageViewer({
+    super.key,
+    required this.bytes,
+    required this.format,
+  });
+
+  String get prettySize => (bytes.length / 1024).toStringAsFixed(1);
+
+  Future<void> _saveImage(BuildContext context) async {
+    try {
+      final extension = (format.isNotEmpty ? format : 'png');
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filename = 'image_$timestamp.$extension';
+      await FileExporter.saveBinaryFile(bytes, filename);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Image saved as $filename'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareImage(BuildContext context) async {
+    try {
+      // fallback: share raw bytes as base64 text if platform share doesn't accept binary
+      final base64Text = base64Encode(bytes);
+      SharePlus.instance.share(
+        ShareParams(
+          text: 'data:image/$format;base64,$base64Text',
+          title: 'Image',
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showFullScreenImage(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            // Full screen interactive viewer
+            SizedBox.expand(
+              child: InteractiveViewer(
+                minScale: 0.1,
+                maxScale: 10.0,
+                clipBehavior: Clip.none,
+                child: Center(
+                  child: Image.memory(
+                    bytes,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  ),
+                ),
+              ),
+            ),
+
+            // Close button (top-right)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              right: 20,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                  tooltip: 'Close',
+                ),
+              ),
+            ),
+
+            // Info and action bar (bottom)
+            Positioned(
+              bottom: MediaQuery.of(context).padding.bottom + 20,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white24, width: 0.5),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${format.toUpperCase()} Image',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            '${(bytes.length / 1024).toStringAsFixed(1)} KB',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white12,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.save_alt,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: () => _saveImageFromFullscreen(
+                              context,
+                              bytes,
+                              format,
+                            ),
+                            tooltip: 'Save',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white12,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.share,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: () => _shareImageFromFullscreen(
+                              context,
+                              bytes,
+                              format,
+                            ),
+                            tooltip: 'Share',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Zoom instructions (top-left)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              left: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Pinch to zoom • Drag to pan',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper methods for fullscreen actions
+  Future<void> _saveImageFromFullscreen(
+    BuildContext context,
+    Uint8List bytes,
+    String format,
+  ) async {
+    try {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filename = 'image_$timestamp.$format';
+
+      final savedPath = await FileExporter.saveBinaryFile(bytes, filename);
+
+      if (context.mounted && savedPath != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Image saved as $filename'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving image: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareImageFromFullscreen(
+    BuildContext context,
+    Uint8List bytes,
+    String format,
+  ) async {
+    try {
+      final base64Text = base64Encode(bytes);
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'data:image/$format;base64,$base64Text',
+          title: 'Image',
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing image: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  IconData _getFormatIcon(String format) {
+    switch (format.toLowerCase()) {
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+        return Icons.image;
+      case 'gif':
+        return Icons.gif;
+      case 'svg':
+        return Icons.image;
+      case 'ico':
+        return Icons.apps;
+      case 'webp':
+        return Icons.web;
+      default:
+        return Icons.image_outlined;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 200, maxHeight: 400),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              child: GestureDetector(
+                onTap: () => _showFullScreenImage(context),
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(20),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(
+                      bytes,
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        height: 150,
+                        color: Colors.grey[100],
+                        child: Center(
+                          child: Text('Failed to load ${format.toUpperCase()}'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(_getFormatIcon(format), size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 8),
+                Text(
+                  '${format.toUpperCase()} • $prettySize KB',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Icon(Icons.zoom_in, size: 16, color: Colors.grey[500]),
+                Text(
+                  ' Tap to zoom',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 enum IOFormat { text, markdown }
 
@@ -380,6 +870,11 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
       ],
     );
 
+    final generator = MarkdownGenerator(
+      inlineSyntaxList: [Base64ImageSyntax()],
+      generators: [base64ImageGenerator2], // This now works correctly
+    );
+
     // Use MarkdownBlock with SingleChildScrollView for auto-scroll support
     return ScrollConfiguration(
       behavior: const ScrollBehavior().copyWith(
@@ -390,7 +885,11 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
         controller: scrollController,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(8.0),
-        child: MarkdownBlock(data: data, config: configWithHighlight),
+        child: MarkdownBlock(
+          data: data,
+          config: configWithHighlight,
+          generator: generator,
+        ),
       ),
     );
   }
@@ -428,7 +927,6 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
       String extension;
 
       if (format == 'dataurl' && content.startsWith('data:image/')) {
-        // Extract from data URL
         final parts = content.split(',');
         if (parts.length != 2) throw Exception('Invalid data URL');
 
@@ -436,7 +934,6 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
         extension = mimeMatch?.group(1) ?? 'png';
         bytes = base64Decode(parts[1]);
       } else {
-        // Clean base64 content
         final cleanBase64 = content
             .replaceAll(RegExp(r'data:image/[^;]+;base64,'), '')
             .replaceAll(RegExp(r'\s+'), '');
@@ -445,21 +942,29 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
         extension = format;
       }
 
-      // Generate filename
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final filename = 'image_$timestamp.$extension';
 
-      // Save as binary file
-      await FileExporter.saveBinaryFile(bytes, filename);
+      // This returns null if user cancels, path if successful
+      final savedPath = await FileExporter.saveBinaryFile(bytes, filename);
 
-      // Show success message
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Image saved as $filename'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (savedPath != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Image saved as $filename'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          // User cancelled - don't show any message or show cancelled message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Save cancelled'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -530,73 +1035,10 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
   ) {
     final cleanBase64 = _cleanBase64(base64Text);
     final bytes = base64Decode(cleanBase64);
-    final fileSize = (bytes.length / 1024).toStringAsFixed(1);
-
-    return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 200, maxHeight: 400),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Image display
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: GestureDetector(
-                onTap: () => _showFullScreenImage(context, bytes, format),
-                child: Container(
-                  constraints: const BoxConstraints(maxHeight: 300),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(
-                      bytes,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) =>
-                          _buildImageError(format, fileSize),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Image info
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(_getFormatIcon(format), size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 8),
-                Text(
-                  '${format.toUpperCase()} • $fileSize KB',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Icon(Icons.zoom_in, size: 16, color: Colors.grey[500]),
-                Text(
-                  ' Tap to zoom',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    final detectedFormat = (format.isEmpty || format == 'dataurl')
+        ? _detectImageFormatFromBytes(bytes)
+        : format;
+    return UnifiedBase64ImageViewer(bytes: bytes, format: detectedFormat);
   }
 
   // Build data URL viewer
@@ -630,86 +1072,6 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // Build image error widget
-  Widget _buildImageError(String format, String fileSize) {
-    return Container(
-      height: 150,
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.broken_image_outlined, size: 32, color: Colors.grey[400]),
-          const SizedBox(height: 8),
-          Text(
-            'Failed to load ${format.toUpperCase()}',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-          ),
-          Text(
-            '$fileSize KB',
-            style: TextStyle(color: Colors.grey[500], fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Show full-screen image dialog
-  void _showFullScreenImage(
-    BuildContext context,
-    Uint8List bytes,
-    String format,
-  ) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (context) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
-        child: Stack(
-          children: [
-            Center(
-              child: InteractiveViewer(
-                maxScale: 5.0,
-                child: Image.memory(bytes, fit: BoxFit.contain),
-              ),
-            ),
-            Positioned(
-              top: 40,
-              right: 20,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close, color: Colors.white, size: 32),
-              ),
-            ),
-            Positioned(
-              bottom: 40,
-              left: 20,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${format.toUpperCase()} • ${(bytes.length / 1024).toStringAsFixed(1)} KB',
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -829,25 +1191,6 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
         .replaceAll(RegExp(r'\s+'), '');
   }
 
-  IconData _getFormatIcon(String format) {
-    switch (format.toLowerCase()) {
-      case 'png':
-      case 'jpg':
-      case 'jpeg':
-        return Icons.image;
-      case 'gif':
-        return Icons.gif;
-      case 'svg':
-        return Icons.image;
-      case 'ico':
-        return Icons.apps;
-      case 'webp':
-        return Icons.web;
-      default:
-        return Icons.image_outlined;
-    }
-  }
-
   void _pasteTestText() {
     if (controller != null) {
       controller!.text = testText;
@@ -957,6 +1300,37 @@ As the morning passed, the forest began to wake in earnest. The sun climbed high
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
       ),
     );
+  }
+
+  WidgetSpan base64ImageGenerator(
+    m.Element node,
+    MarkdownConfig config,
+    TextStyle? style,
+  ) {
+    final dataUrl = node.attributes['src'] ?? '';
+    final alt = node.attributes['alt'] ?? '';
+
+    try {
+      final bytes = base64Decode(dataUrl.split(',').last);
+      return WidgetSpan(
+        child: GestureDetector(
+          onTap: () {
+            // Optional full screen view
+          },
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (c, e, s) {
+              return Text('[Invalid image]', style: style);
+            },
+          ),
+        ),
+      );
+    } catch (_) {
+      return WidgetSpan(
+        child: Text('[Invalid base64 image: $alt]', style: style),
+      );
+    }
   }
 
   @override
