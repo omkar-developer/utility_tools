@@ -1,4 +1,10 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 import 'dart:math';
 import 'package:utility_tools/models/tool.dart';
@@ -8,6 +14,8 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:image/image.dart' as img;
+import 'package:utility_tools/services/app_settings.dart';
+import 'package:utility_tools/services/ffmpeg_service.dart';
 
 class PngToIcoTool extends Tool {
   PngToIcoTool()
@@ -2120,6 +2128,7 @@ class NinePatchDecoratorTool extends Tool {
               'tab',
               'slider_thumb',
               'switch_track',
+              'custom',
             ],
             'help': 'Quick preset configurations for common UI elements',
           },
@@ -3913,6 +3922,1092 @@ class CustomControlTestTool extends Tool {
   }
 }
 
+class VideoToGifTool extends Tool {
+  VideoToGifTool()
+    : super(
+        name: '🎞️ Video to GIF Converter',
+        description:
+            'Convert video clips to animated GIFs with advanced controls',
+        icon: Icons.gif_box_outlined,
+        allowEmptyInput: true, // No text input needed - use file picker
+        isOutputMarkdown: true,
+        settings: {
+          'video_settings': {
+            'file_path': '',
+            'start_time': 0.0,
+            'duration': 5.0,
+            'width': 480,
+            'fps': 15,
+          },
+          'quality_settings': {
+            'max_colors': 256,
+            'dithering': true,
+            'palette_mode': 'adaptive',
+            'optimization': 'balanced',
+          },
+          'output_settings': {
+            'loop_count': 0,
+            'filename_prefix': 'video_to_gif',
+            'preview_enabled': true,
+          },
+        },
+        settingsHints: {
+          'video_settings': {
+            'type': 'custom',
+            'label': 'Video Settings',
+            'help': 'Video file selection and timing controls',
+            'show_label': false,
+            'builder': _buildVideoSettingsControl,
+          },
+          'quality_settings': {
+            'type': 'custom',
+            'label': 'Quality Settings',
+            'help': 'Advanced quality and color palette options',
+            'show_label': false,
+            'builder': _buildQualitySettingsControl,
+          },
+          'output_settings': {
+            'type': 'custom',
+            'label': 'Output Settings',
+            'help': 'Output file and display options',
+            'show_label': false,
+            'builder': _buildOutputSettingsControl,
+          },
+        },
+      );
+
+  /// Initialize temp directory and cleanup old files
+  static Future<void> initializeAndCleanup() async {
+    if (kIsWeb) return; // Skip on web
+
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final tempDir = Directory(
+        path.join(appDocDir.path, 'utility_tools', 'temp'),
+      );
+
+      // Create temp directory if it doesn't exist
+      if (!await tempDir.exists()) {
+        await tempDir.create(recursive: true);
+      }
+
+      // Clean up old temp files (older than 24 hours)
+      await _cleanupOldTempFiles();
+    } catch (e) {
+      print('Failed to initialize temp directory: $e');
+    }
+  }
+
+  static Future<void> _cleanupOldTempFiles() async {
+    if (kIsWeb) return; // Skip on web
+    final tempDir = Directory(
+      path.join(
+        (await getApplicationDocumentsDirectory()).path,
+        'utility_tools',
+        'temp',
+      ),
+    );
+    if (!await tempDir.exists()) return;
+
+    try {
+      final now = DateTime.now();
+      await for (final entity in tempDir.list()) {
+        if (entity is File) {
+          final stat = await entity.stat();
+          final age = now.difference(stat.modified);
+
+          // Delete files older than 24 hours
+          if (age.inHours > 24) {
+            try {
+              await entity.delete();
+            } catch (e) {
+              // Ignore deletion errors for individual files
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error during temp cleanup: $e');
+    }
+  }
+
+  // Get video duration using FFprobe
+  static Future<double> _getVideoDuration(String videoPath) async {
+    try {
+      final result = await Process.run(
+        AppSettings.ffmpegPath.replaceAll('ffmpeg', 'ffprobe'),
+        [
+          '-v',
+          'quiet',
+          '-show_entries',
+          'format=duration',
+          '-of',
+          'csv=p=0',
+          videoPath,
+        ],
+      );
+
+      if (result.exitCode == 0) {
+        final durationStr = result.stdout.toString().trim();
+        return double.tryParse(durationStr) ?? 0.0;
+      }
+    } catch (e) {
+      // Fallback - try with ffmpeg
+      try {
+        final result = await Process.run(AppSettings.ffmpegPath, [
+          '-i',
+          videoPath,
+        ], runInShell: true);
+
+        final stderr = result.stderr.toString();
+        final durationMatch = RegExp(
+          r'Duration: (\d+):(\d+):(\d+\.\d+)',
+        ).firstMatch(stderr);
+        if (durationMatch != null) {
+          final hours = int.parse(durationMatch.group(1)!);
+          final minutes = int.parse(durationMatch.group(2)!);
+          final seconds = double.parse(durationMatch.group(3)!);
+          return hours * 3600 + minutes * 60 + seconds;
+        }
+      } catch (e2) {
+        // If all fails, return default
+      }
+    }
+    return 60.0; // Default fallback
+  }
+
+  static Widget _buildVideoSettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final videoSettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+
+    // Always derive from settings
+    final selectedVideoPath = videoSettings['file_path'] as String?;
+    final videoDuration = (videoSettings['video_duration'] as double?) ?? 0.0;
+    final startTime = (videoSettings['start_time'] as double?) ?? 0.0;
+    final duration = (videoSettings['duration'] as double?) ?? 0.0;
+    final endTime = startTime + duration;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: theme.colorScheme.outline.withOpacity(0.5),
+            ),
+            borderRadius: BorderRadius.circular(12),
+            color: theme.colorScheme.surface,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Icon(Icons.video_settings, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Video Settings',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // File picker section
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withOpacity(0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: kIsWeb
+                              ? null
+                              : () async {
+                                  try {
+                                    FilePickerResult? result = await FilePicker
+                                        .platform
+                                        .pickFiles(
+                                          type: FileType.video,
+                                          allowMultiple: false,
+                                        );
+
+                                    if (result != null &&
+                                        result.files.single.path != null) {
+                                      final newPath = result.files.single.path!;
+
+                                      // Get video duration
+                                      final duration = await _getVideoDuration(
+                                        newPath,
+                                      );
+
+                                      // Update the settings map
+                                      final updatedSettings =
+                                          Map<String, dynamic>.from(
+                                            videoSettings,
+                                          );
+                                      updatedSettings['file_path'] = newPath;
+                                      updatedSettings['video_duration'] =
+                                          duration;
+                                      updatedSettings['start_time'] = 0.0;
+                                      updatedSettings['duration'] = duration
+                                          .clamp(0.0, 30.0);
+
+                                      setState(() {}); // rebuild UI
+                                      onChanged(key, updatedSettings);
+                                    }
+                                  } catch (e) {
+                                    print('Error picking file: $e');
+                                  }
+                                },
+                          icon: const Icon(Icons.video_file, size: 20),
+                          label: Text(
+                            selectedVideoPath == null
+                                ? 'Choose Video'
+                                : 'Change Video',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: selectedVideoPath == null
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.secondary,
+                            foregroundColor: theme.colorScheme.onPrimary,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                        if (kIsWeb) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'File picker not available on web',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+
+                    if (selectedVideoPath != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer.withOpacity(
+                            0.5,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: theme.colorScheme.primary.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  color: theme.colorScheme.primary,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    path.basename(selectedVideoPath),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color:
+                                          theme.colorScheme.onPrimaryContainer,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Duration: ${videoDuration.toStringAsFixed(1)}s',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onPrimaryContainer
+                                    .withOpacity(0.8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // Width control section
+              if (selectedVideoPath != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Output Width',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: videoSettings['width'].toString(),
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                hintText: 'Enter width',
+                                suffixText: 'px',
+                                border: const OutlineInputBorder(),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                fillColor: theme.colorScheme.surface,
+                                filled: true,
+                              ),
+                              onChanged: (value) {
+                                final updatedSettings =
+                                    Map<String, dynamic>.from(videoSettings);
+                                updatedSettings['width'] =
+                                    int.tryParse(value) ?? 480;
+                                onChanged(key, updatedSettings);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          PopupMenuButton<int>(
+                            icon: Icon(
+                              Icons.arrow_drop_down,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            tooltip: 'Presets',
+                            onSelected: (value) {
+                              final updatedSettings = Map<String, dynamic>.from(
+                                videoSettings,
+                              );
+                              updatedSettings['width'] = value;
+                              onChanged(key, updatedSettings);
+                              setState(() {});
+                            },
+                            itemBuilder: (context) =>
+                                [240, 320, 480, 640, 800, 1024]
+                                    .map(
+                                      (preset) => PopupMenuItem<int>(
+                                        value: preset,
+                                        child: Text('${preset}px'),
+                                      ),
+                                    )
+                                    .toList(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Height will be auto-scaled to maintain aspect ratio',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Time range section
+              if (selectedVideoPath != null && videoDuration > 0) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select Time Range',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      RangeSlider(
+                        values: RangeValues(startTime, endTime),
+                        min: 0.0,
+                        max: videoDuration,
+                        divisions: (videoDuration * 10).round().clamp(10, 1000),
+                        labels: RangeLabels(
+                          '${startTime.toStringAsFixed(1)}s',
+                          '${endTime.toStringAsFixed(1)}s',
+                        ),
+                        onChanged: (RangeValues values) {
+                          final updatedSettings = Map<String, dynamic>.from(
+                            videoSettings,
+                          );
+                          updatedSettings['start_time'] = values.start;
+                          updatedSettings['duration'] =
+                              values.end - values.start;
+                          onChanged(key, updatedSettings);
+                          setState(() {});
+                        },
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildTimeDisplay(
+                              context,
+                              'Start',
+                              '${startTime.toStringAsFixed(1)}s',
+                            ),
+                            _buildTimeDisplay(
+                              context,
+                              'Duration',
+                              '${duration.toStringAsFixed(1)}s',
+                              color: theme.colorScheme.primary,
+                            ),
+                            _buildTimeDisplay(
+                              context,
+                              'End',
+                              '${endTime.toStringAsFixed(1)}s',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // FPS Control
+              const SizedBox(height: 16),
+              Text(
+                'Frame Rate (FPS)',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Slider(
+                value: (videoSettings['fps'] as int).toDouble(),
+                min: 5,
+                max: 30,
+                divisions: 25,
+                label: '${videoSettings['fps']} FPS',
+                onChanged: (value) {
+                  final updatedSettings = Map<String, dynamic>.from(
+                    videoSettings,
+                  );
+                  updatedSettings['fps'] = value.round();
+                  onChanged(key, updatedSettings);
+                  setState(() {});
+                },
+              ),
+
+              if (hint['help'] != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  hint['help'],
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static Widget _buildQualitySettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final qualitySettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.surface,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.palette, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Quality Settings',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Max Colors
+          Text(
+            'Max Colors: ${qualitySettings['max_colors']}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Slider(
+                  value: (qualitySettings['max_colors'] as int).toDouble(),
+                  min: 16,
+                  max: 256,
+                  divisions: 15,
+                  label: qualitySettings['max_colors'].toString(),
+                  onChanged: (value) {
+                    final updatedSettings = Map<String, dynamic>.from(
+                      qualitySettings,
+                    );
+                    updatedSettings['max_colors'] = value.round();
+                    onChanged(key, updatedSettings);
+                  },
+                ),
+              ),
+              PopupMenuButton<int>(
+                icon: Icon(Icons.tune, color: theme.colorScheme.onSurface),
+                tooltip: 'Quality Presets',
+                onSelected: (value) {
+                  final updatedSettings = Map<String, dynamic>.from(
+                    qualitySettings,
+                  );
+                  updatedSettings['max_colors'] = value;
+                  onChanged(key, updatedSettings);
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 64,
+                    child: Text('Low (64 colors)'),
+                  ),
+                  const PopupMenuItem(
+                    value: 128,
+                    child: Text('Medium (128 colors)'),
+                  ),
+                  const PopupMenuItem(
+                    value: 192,
+                    child: Text('High (192 colors)'),
+                  ),
+                  const PopupMenuItem(
+                    value: 256,
+                    child: Text('Ultra (256 colors)'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Palette Mode
+          Text(
+            'Color Palette Mode',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButton<String>(
+            value: qualitySettings['palette_mode'],
+            isExpanded: true,
+            dropdownColor: theme.colorScheme.surface,
+            items: const [
+              DropdownMenuItem(
+                value: 'adaptive',
+                child: Text('Adaptive (Best Quality)'),
+              ),
+              DropdownMenuItem(value: 'web_safe', child: Text('Web Safe')),
+              DropdownMenuItem(value: 'grayscale', child: Text('Grayscale')),
+              DropdownMenuItem(
+                value: 'high_contrast',
+                child: Text('High Contrast'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                final updatedSettings = Map<String, dynamic>.from(
+                  qualitySettings,
+                );
+                updatedSettings['palette_mode'] = value;
+                onChanged(key, updatedSettings);
+              }
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          // Optimization
+          Text(
+            'Optimization Priority',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButton<String>(
+            value: qualitySettings['optimization'],
+            isExpanded: true,
+            dropdownColor: theme.colorScheme.surface,
+            items: const [
+              DropdownMenuItem(
+                value: 'speed',
+                child: Text('Speed (Faster Processing)'),
+              ),
+              DropdownMenuItem(value: 'balanced', child: Text('Balanced')),
+              DropdownMenuItem(
+                value: 'size',
+                child: Text('File Size (Smaller Output)'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                final updatedSettings = Map<String, dynamic>.from(
+                  qualitySettings,
+                );
+                updatedSettings['optimization'] = value;
+                onChanged(key, updatedSettings);
+              }
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          // Dithering toggle
+          SwitchListTile(
+            title: Text('Enable Dithering', style: theme.textTheme.bodyMedium),
+            subtitle: Text(
+              'Improves color gradients but increases file size',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            value: qualitySettings['dithering'],
+            onChanged: (value) {
+              final updatedSettings = Map<String, dynamic>.from(
+                qualitySettings,
+              );
+              updatedSettings['dithering'] = value;
+              onChanged(key, updatedSettings);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildOutputSettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final outputSettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.surface,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.settings, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Output Settings',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Loop Count
+          Text(
+            'Loop Count: ${outputSettings['loop_count'] == 0 ? 'Infinite' : outputSettings['loop_count']}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Slider(
+            value: (outputSettings['loop_count'] as int).toDouble(),
+            min: 0,
+            max: 10,
+            divisions: 10,
+            label: outputSettings['loop_count'] == 0
+                ? 'Infinite'
+                : outputSettings['loop_count'].toString(),
+            onChanged: (value) {
+              final updatedSettings = Map<String, dynamic>.from(outputSettings);
+              updatedSettings['loop_count'] = value.round();
+              onChanged(key, updatedSettings);
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          // Filename Prefix
+          TextFormField(
+            initialValue: outputSettings['filename_prefix'],
+            decoration: InputDecoration(
+              labelText: 'Filename Prefix',
+              hintText: 'video_to_gif',
+              border: const OutlineInputBorder(),
+              fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+              filled: true,
+            ),
+            onChanged: (value) {
+              final updatedSettings = Map<String, dynamic>.from(outputSettings);
+              updatedSettings['filename_prefix'] = value;
+              onChanged(key, updatedSettings);
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          // Preview toggle
+          SwitchListTile(
+            title: Text('Show Preview', style: theme.textTheme.bodyMedium),
+            subtitle: Text(
+              'Display the generated GIF in results',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            value: outputSettings['preview_enabled'],
+            onChanged: (value) {
+              final updatedSettings = Map<String, dynamic>.from(outputSettings);
+              updatedSettings['preview_enabled'] = value;
+              onChanged(key, updatedSettings);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildTimeDisplay(
+    BuildContext context,
+    String label,
+    String value, {
+    Color? color,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w500,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<File> _generateUniqueOutputFile(String prefix) async {
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final tempDir = Directory(
+      path.join(appDocDir.path, 'utility_tools', 'temp'),
+    );
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final filename = '${prefix}_$timestamp.gif';
+    return File(path.join(tempDir.path, filename));
+  }
+
+  List<String> _buildFFmpegArgs(File inputVideo, File outputGif) {
+    final videoSettings = settings['video_settings'] as Map<String, dynamic>;
+    final qualitySettings =
+        settings['quality_settings'] as Map<String, dynamic>;
+    final outputSettings = settings['output_settings'] as Map<String, dynamic>;
+
+    final startTime = (videoSettings['start_time'] is int)
+        ? (videoSettings['start_time'] as int).toDouble()
+        : videoSettings['start_time'] as double;
+    final duration = (videoSettings['duration'] is int)
+        ? (videoSettings['duration'] as int).toDouble()
+        : videoSettings['duration'] as double;
+
+    final width = videoSettings['width'] as int;
+    final fps = videoSettings['fps'] as int;
+    final maxColors = qualitySettings['max_colors'] as int;
+    final paletteMode = qualitySettings['palette_mode'] as String;
+    final dithering = qualitySettings['dithering'] as bool;
+    final optimization = qualitySettings['optimization'] as String;
+    final loopCount = outputSettings['loop_count'] as int;
+
+    final ditherMode = dithering ? 'bayer:bayer_scale=3' : 'none';
+
+    // Build filter chain
+    List<String> baseFilters = ['fps=$fps'];
+    baseFilters.add('scale=$width:-1:flags=lanczos');
+
+    // Add specific filters based on palette mode
+    switch (paletteMode) {
+      case 'grayscale':
+        baseFilters.add('format=gray');
+        break;
+      case 'high_contrast':
+        baseFilters.add('eq=contrast=1.3:brightness=0.1');
+        break;
+    }
+
+    final videoFilters = baseFilters.join(',');
+
+    // Palette generation filter - use safer parameters
+    String paletteFilter;
+    switch (paletteMode) {
+      case 'web_safe':
+        paletteFilter =
+            'palettegen=max_colors=$maxColors:reserve_transparent=0:stats_mode=single';
+        break;
+      case 'high_contrast':
+        paletteFilter = 'palettegen=max_colors=$maxColors:stats_mode=diff';
+        break;
+      default: // adaptive and grayscale
+        paletteFilter = 'palettegen=max_colors=$maxColors:stats_mode=diff';
+    }
+
+    // Build the complete filter_complex string
+    final filterComplex =
+        '[0:v] $videoFilters [v]; [v] $paletteFilter [p]; [v][p] paletteuse=dither=$ditherMode';
+
+    // Build FFmpeg arguments with safer parameters
+    List<String> args = [
+      '-y', // Overwrite output
+      '-ss', startTime.toString(),
+      '-t', duration.toString(),
+      '-i', inputVideo.path,
+      '-filter_complex', filterComplex,
+    ];
+
+    // Add optimization-specific parameters
+    switch (optimization) {
+      case 'speed':
+        args.addAll(['-preset', 'ultrafast']);
+        break;
+      case 'size':
+        args.addAll(['-preset', 'veryslow']);
+        break;
+      default: // balanced
+        args.addAll(['-preset', 'medium']);
+    }
+
+    // Loop count (must come before output file)
+    if (loopCount > 0) {
+      args.addAll(['-loop', loopCount.toString()]);
+    }
+
+    args.add(outputGif.path);
+    return args;
+  }
+
+  @override
+  Stream<String>? executeStream(String input) async* {
+    try {
+      final videoSettings = settings['video_settings'] as Map<String, dynamic>;
+      final qualitySettings =
+          settings['quality_settings'] as Map<String, dynamic>;
+      final outputSettings =
+          settings['output_settings'] as Map<String, dynamic>;
+
+      // Check if video file is selected
+      var selectedVideoPath = videoSettings['file_path'] as String?;
+      if (selectedVideoPath == null || selectedVideoPath.isEmpty) {
+        yield '❌ **Error**: No video file selected. Please use the file picker in settings.\n\n';
+        return;
+      }
+
+      final videoFile = File(selectedVideoPath!);
+      if (!await videoFile.exists()) {
+        yield '❌ **Error**: Selected video file not found: `${videoFile.path}`\n\n';
+        return;
+      }
+
+      // Generate unique output file
+      final outputGif = await _generateUniqueOutputFile(
+        outputSettings['filename_prefix'] as String,
+      );
+
+      yield '# 🎞️ Video to GIF Conversion\n\n';
+      yield '**Input Video**: `${path.basename(videoFile.path)}`  \n';
+      yield '**Output GIF**: `${path.basename(outputGif.path)}`  \n';
+      yield '**Start Time**: ${videoSettings['start_time']}s  \n';
+      yield '**Duration**: ${videoSettings['duration']}s  \n';
+      yield '**Dimensions**: ${videoSettings['width']}px wide  \n';
+      yield '**Frame Rate**: ${videoSettings['fps']} FPS  \n';
+      yield '**Max Colors**: ${qualitySettings['max_colors']}  \n';
+      yield '**Palette Mode**: ${qualitySettings['palette_mode']}  \n';
+      yield '**Optimization**: ${qualitySettings['optimization']}  \n';
+      yield '**Dithering**: ${qualitySettings['dithering'] ? 'Enabled' : 'Disabled'}  \n';
+      yield '**Loop Count**: ${outputSettings['loop_count'] == 0 ? 'Infinite' : outputSettings['loop_count']}  \n\n';
+      yield '---\n\n';
+      yield '## 🔄 Processing...\n\n';
+
+      // Build FFmpeg arguments
+      final args = _buildFFmpegArgs(videoFile, outputGif);
+
+      yield '```bash\n';
+      yield 'ffmpeg ${args.join(' ')}\n';
+      yield '```\n\n';
+
+      // Execute FFmpeg with streaming output
+      bool hasError = false;
+      await for (final line in FfmpegService.instance.runStream(args)) {
+        if (line.contains('[FFmpeg error:') ||
+            line.contains('[FFmpeg exception:')) {
+          hasError = true;
+          yield '❌ $line\n';
+        } else if (line.contains('[FFmpeg finished successfully]')) {
+          yield '✅ $line\n';
+        } else if (line.contains('[Cancelled]')) {
+          yield '⚠️ $line\n';
+          return;
+        } else {
+          // Show progress or relevant info
+          if (line.contains('frame=') ||
+              line.contains('fps=') ||
+              line.contains('time=')) {
+            yield '`$line`\n';
+          }
+        }
+      }
+
+      yield '\n---\n\n';
+
+      if (!hasError && await outputGif.exists()) {
+        final fileSize = await outputGif.length();
+        final fileSizeMB = (fileSize / (1024 * 1024)).toStringAsFixed(2);
+
+        yield '## ✅ GIF Generated Successfully!\n\n';
+        yield '**File Size**: ${fileSizeMB} MB  \n';
+        yield '**Location**: `${outputGif.path}`  \n\n';
+
+        // Quality summary
+        yield '### 📊 Quality Summary:\n';
+        yield '- **Colors Used**: Up to ${qualitySettings['max_colors']} colors\n';
+        yield '- **Palette Mode**: ${qualitySettings['palette_mode']}\n';
+        yield '- **Dithering**: ${qualitySettings['dithering'] ? 'Applied for smoother gradients' : 'Disabled for sharper edges'}\n';
+        yield '- **Optimization**: ${qualitySettings['optimization']} priority\n\n';
+
+        // Show preview if enabled
+        if (outputSettings['preview_enabled'] as bool) {
+          try {
+            final bytes = await outputGif.readAsBytes();
+            final base64Gif = base64Encode(bytes);
+            yield '### 🖼️ Preview:\n\n';
+            yield '```gif\n';
+            yield 'data:image/gif;base64,$base64Gif\n';
+            yield '```\n\n';
+          } catch (e) {
+            yield '⚠️ Could not generate preview: $e\n\n';
+          }
+        }
+
+        yield '💡 **Tips**:\n';
+        yield '- The GIF is saved in the app\'s temp directory and will be automatically cleaned up after 24 hours\n';
+        yield '- For smaller file sizes, try reducing max colors or disabling dithering\n';
+        yield '- For better quality, increase max colors or enable dithering\n';
+        yield '- Use "size" optimization priority for the smallest possible files\n';
+      } else {
+        yield '❌ **Failed**: No output file generated or conversion failed.\n\n';
+
+        // Provide troubleshooting tips
+        yield '### 🔧 Troubleshooting:\n';
+        yield '- Try reducing the max colors setting (FFmpeg error -34 often indicates too many colors)\n';
+        yield '- Ensure the video file is not corrupted\n';
+        yield '- Try a shorter duration for the GIF\n';
+        yield '- Check that FFmpeg is properly installed and accessible\n\n';
+      }
+    } catch (e) {
+      yield '❌ **Error**: $e\n\n';
+    }
+  }
+
+  @override
+  Future<ToolResult> execute(String input) async {
+    // Fallback for non-streaming execution
+    final buffer = StringBuffer();
+
+    await for (final line in executeStream(input) ?? const Stream.empty()) {
+      buffer.write(line);
+    }
+
+    final output = buffer.toString();
+    final isSuccess = output.contains('✅ GIF Generated Successfully!');
+
+    return ToolResult(output: output, status: isSuccess ? 'success' : 'error');
+  }
+}
+
 Map<String, List<Tool Function()>> getMiscTools() {
   return {
     'Image Tools': [
@@ -3925,6 +5020,7 @@ Map<String, List<Tool Function()>> getMiscTools() {
       () => ColorPaletteGenerator(),
       () => NinePatchUITool(),
       () => CustomControlTestTool(),
+      () => VideoToGifTool(),
     ],
   };
 }

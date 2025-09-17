@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -87,4 +90,13 @@ class AppSettings {
       _settingsBox.get('auto_save_enabled', defaultValue: true);
   static set autoSaveEnabled(bool enabled) =>
       _settingsBox.put('auto_save_enabled', enabled);
+
+  static String get ffmpegPath {
+    final defaultPath = !kIsWeb && Platform.isWindows
+        ? r'C:\ffmpeg\bin\ffmpeg.exe'
+        : '';
+    return _settingsBox.get('ffmpeg_path', defaultValue: defaultPath);
+  }
+
+  static set ffmpegPath(String path) => _settingsBox.put('ffmpeg_path', path);
 }

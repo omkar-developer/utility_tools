@@ -580,7 +580,6 @@ class _SettingsEditorState extends State<SettingsEditor> {
     return InkWell(
       onTap: () async {
         try {
-          // You'll need to add file_picker package for this to work
           final result = await FilePicker.platform.pickFiles(
             type: accept.isEmpty ? FileType.any : FileType.custom,
             allowedExtensions: accept.isEmpty

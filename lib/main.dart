@@ -1,8 +1,12 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:utility_tools/classes/js_change_notifier.dart';
+import 'package:utility_tools/text_tools/misc_tools.dart';
 import 'package:utility_tools/widgets/js_script_library_dialog.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:http/http.dart' as http;
@@ -119,7 +123,16 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Hive
-  await Hive.initFlutter();
+  await Hive.initFlutter('utility_tools');
+
+  if (!kIsWeb) {
+    try {
+      await VideoToGifTool.initializeAndCleanup();
+      print('✅ Temp directory initialized and cleaned up');
+    } catch (e) {
+      print('⚠️ Failed to initialize temp cleanup: $e');
+    }
+  }
 
   // Initialize AppSettings
   await AppSettings.init();
@@ -704,28 +717,97 @@ class _HomePageState extends State<HomePage> with WindowListener {
     throw Exception("Unexpected models response format: ${res.body}");
   }
 
+  static Widget _buildFfmpegPathPicker(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function updateSetting,
+  ) {
+    final currentPath = value as String? ?? '';
+    return InkWell(
+      onTap: () async {
+        try {
+          final result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: ['exe', 'bin'],
+            allowMultiple: false,
+          );
+
+          if (result != null && result.files.isNotEmpty) {
+            final path = result.files.single.path!;
+            final fileName = path
+                .split(Platform.pathSeparator)
+                .last
+                .toLowerCase();
+
+            // Simple filename validation
+            final isValid =
+                (Platform.isWindows && fileName == 'ffmpeg.exe') ||
+                (!Platform.isWindows && fileName == 'ffmpeg');
+
+            if (!isValid) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Selected file is not ffmpeg')),
+                );
+              }
+              return;
+            }
+
+            // Optional: check ffmpeg -version
+            try {
+              final result = await Process.run(path, ['-version']);
+              if (result.exitCode != 0) {
+                throw 'Not a valid FFmpeg executable';
+              }
+            } catch (_) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('FFmpeg verification failed')),
+                );
+              }
+              return;
+            }
+
+            updateSetting(key, path);
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Failed to pick file: $e')));
+          }
+        }
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.folder, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                currentPath.isNotEmpty
+                    ? currentPath.split(Platform.pathSeparator).last
+                    : 'Select FFmpeg...',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showGlobalSettingsDialog() async {
     if (!mounted) return;
     final currentContext = context;
-
-    // Fetch available models
-    List<String> availableModels = [];
-    try {
-      availableModels = await OllamaService.getAvailableModels(
-        AppSettings.aiBaseUrl,
-      );
-    } catch (e) {
-      // Use default models if fetch fails
-      availableModels = [
-        'qwen2.5-coder:7b',
-        'qwen2.5-coder:14b',
-        'qwen2.5-coder:32b',
-        'llama3.2:3b',
-        'llama3.2:1b',
-        'deepseek-coder-v2:16b',
-        'codestral:22b',
-      ];
-    }
 
     if (!mounted) return;
 
@@ -748,6 +830,10 @@ class _HomePageState extends State<HomePage> with WindowListener {
     // Add desktop-specific settings only if not on web
     if (!kIsWeb) {
       settings['remember_window_size'] = AppSettings.rememberWindowSize;
+    }
+
+    if (!kIsWeb) {
+      settings['ffmpeg_path'] = AppSettings.ffmpegPath;
     }
 
     final Map<String, dynamic> settingsHints = {
@@ -843,6 +929,16 @@ class _HomePageState extends State<HomePage> with WindowListener {
       };
     }
 
+    if (!kIsWeb) {
+      settingsHints['ffmpeg_path'] = {
+        'type': 'custom',
+        'label': 'FFmpeg Path',
+        'help': 'Select your FFmpeg executable (required for GIF/video tools)',
+        'show_label': true,
+        'builder': _buildFfmpegPathPicker,
+      };
+    }
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => SettingsDialog(
@@ -872,6 +968,10 @@ class _HomePageState extends State<HomePage> with WindowListener {
       // Desktop-specific settings
       if (!kIsWeb && result.containsKey('remember_window_size')) {
         AppSettings.rememberWindowSize = result['remember_window_size'] as bool;
+      }
+
+      if (!kIsWeb && result.containsKey('ffmpeg_path')) {
+        AppSettings.ffmpegPath = result['ffmpeg_path'] as String;
       }
 
       // Update theme if mounted
