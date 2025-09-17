@@ -3931,12 +3931,13 @@ class VideoToGifTool extends Tool {
         icon: Icons.gif_box_outlined,
         allowEmptyInput: true, // No text input needed - use file picker
         isOutputMarkdown: true,
+        supportsStreaming: true,
         settings: {
           'video_settings': {
             'file_path': '',
             'start_time': 0.0,
             'duration': 5.0,
-            'width': 480,
+            'width': -1, // -1 means auto/keep original
             'fps': 15,
           },
           'quality_settings': {
@@ -3946,7 +3947,7 @@ class VideoToGifTool extends Tool {
             'optimization': 'balanced',
           },
           'output_settings': {
-            'loop_count': 0,
+            'loop_count': -1, // -1 = infinite, 0 = no loop, >0 = specific count
             'filename_prefix': 'video_to_gif',
             'preview_enabled': true,
           },
@@ -4095,6 +4096,10 @@ class VideoToGifTool extends Tool {
 
     return StatefulBuilder(
       builder: (context, setState) {
+        // Get current values for local state
+        int currentWidth = videoSettings['width'] as int? ?? -1;
+        int currentFps = videoSettings['fps'] as int? ?? 15;
+
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -4286,11 +4291,13 @@ class VideoToGifTool extends Tool {
                         children: [
                           Expanded(
                             child: TextFormField(
-                              initialValue: videoSettings['width'].toString(),
-                              keyboardType: TextInputType.number,
+                              key: ValueKey('width_field_$currentWidth'),
+                              initialValue: currentWidth == -1
+                                  ? 'Auto'
+                                  : currentWidth.toString(),
                               decoration: InputDecoration(
-                                hintText: 'Enter width',
-                                suffixText: 'px',
+                                hintText: 'Auto or width in pixels',
+                                suffixText: currentWidth == -1 ? '' : 'px',
                                 border: const OutlineInputBorder(),
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -4302,8 +4309,16 @@ class VideoToGifTool extends Tool {
                               onChanged: (value) {
                                 final updatedSettings =
                                     Map<String, dynamic>.from(videoSettings);
-                                updatedSettings['width'] =
-                                    int.tryParse(value) ?? 480;
+                                if (value.toLowerCase() == 'auto' ||
+                                    value.isEmpty) {
+                                  updatedSettings['width'] = -1;
+                                  currentWidth = -1;
+                                } else {
+                                  final width = int.tryParse(value) ?? -1;
+                                  updatedSettings['width'] = width;
+                                  currentWidth = width;
+                                }
+                                setState(() {});
                                 onChanged(key, updatedSettings);
                               },
                             ),
@@ -4320,24 +4335,48 @@ class VideoToGifTool extends Tool {
                                 videoSettings,
                               );
                               updatedSettings['width'] = value;
-                              onChanged(key, updatedSettings);
+                              currentWidth = value;
                               setState(() {});
+                              onChanged(key, updatedSettings);
                             },
-                            itemBuilder: (context) =>
-                                [240, 320, 480, 640, 800, 1024]
-                                    .map(
-                                      (preset) => PopupMenuItem<int>(
-                                        value: preset,
-                                        child: Text('${preset}px'),
-                                      ),
-                                    )
-                                    .toList(),
+                            itemBuilder: (context) => [
+                              const PopupMenuItem<int>(
+                                value: -1,
+                                child: Text('Auto (Original Size)'),
+                              ),
+                              const PopupMenuItem<int>(
+                                value: 240,
+                                child: Text('240px'),
+                              ),
+                              const PopupMenuItem<int>(
+                                value: 320,
+                                child: Text('320px'),
+                              ),
+                              const PopupMenuItem<int>(
+                                value: 480,
+                                child: Text('480px'),
+                              ),
+                              const PopupMenuItem<int>(
+                                value: 640,
+                                child: Text('640px'),
+                              ),
+                              const PopupMenuItem<int>(
+                                value: 800,
+                                child: Text('800px'),
+                              ),
+                              const PopupMenuItem<int>(
+                                value: 1024,
+                                child: Text('1024px'),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Height will be auto-scaled to maintain aspect ratio',
+                        currentWidth == -1
+                            ? 'Keep original video dimensions'
+                            : 'Height will be auto-scaled to maintain aspect ratio',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurface.withOpacity(0.6),
                         ),
@@ -4420,26 +4459,49 @@ class VideoToGifTool extends Tool {
 
               // FPS Control
               const SizedBox(height: 16),
-              Text(
-                'Frame Rate (FPS)',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withOpacity(0.3),
+                  ),
                 ),
-              ),
-              Slider(
-                value: (videoSettings['fps'] as int).toDouble(),
-                min: 5,
-                max: 30,
-                divisions: 25,
-                label: '${videoSettings['fps']} FPS',
-                onChanged: (value) {
-                  final updatedSettings = Map<String, dynamic>.from(
-                    videoSettings,
-                  );
-                  updatedSettings['fps'] = value.round();
-                  onChanged(key, updatedSettings);
-                  setState(() {});
-                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Frame Rate (FPS): $currentFps',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Slider(
+                      value: currentFps.toDouble(),
+                      min: 5,
+                      max: 30,
+                      divisions: 25,
+                      label: '$currentFps FPS',
+                      onChanged: (value) {
+                        final updatedSettings = Map<String, dynamic>.from(
+                          videoSettings,
+                        );
+                        updatedSettings['fps'] = value.round();
+                        currentFps = value.round();
+                        setState(() {});
+                        onChanged(key, updatedSettings);
+                      },
+                    ),
+                    Text(
+                      'Lower FPS = smaller file size, Higher FPS = smoother motion',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
               ),
 
               if (hint['help'] != null) ...[
@@ -4468,183 +4530,216 @@ class VideoToGifTool extends Tool {
     final qualitySettings = value as Map<String, dynamic>;
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
-        borderRadius: BorderRadius.circular(12),
-        color: theme.colorScheme.surface,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.palette, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                'Quality Settings',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+    return StatefulBuilder(
+      builder: (context, setState) {
+        int currentMaxColors = qualitySettings['max_colors'] as int? ?? 256;
+        String currentPaletteMode =
+            qualitySettings['palette_mode'] as String? ?? 'adaptive';
+        String currentOptimization =
+            qualitySettings['optimization'] as String? ?? 'balanced';
+        bool currentDithering = qualitySettings['dithering'] as bool? ?? true;
 
-          // Max Colors
-          Text(
-            'Max Colors: ${qualitySettings['max_colors']}',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w500,
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: theme.colorScheme.outline.withOpacity(0.5),
             ),
+            borderRadius: BorderRadius.circular(12),
+            color: theme.colorScheme.surface,
           ),
-          const SizedBox(height: 8),
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Slider(
-                  value: (qualitySettings['max_colors'] as int).toDouble(),
-                  min: 16,
-                  max: 256,
-                  divisions: 15,
-                  label: qualitySettings['max_colors'].toString(),
-                  onChanged: (value) {
-                    final updatedSettings = Map<String, dynamic>.from(
-                      qualitySettings,
-                    );
-                    updatedSettings['max_colors'] = value.round();
-                    onChanged(key, updatedSettings);
-                  },
-                ),
-              ),
-              PopupMenuButton<int>(
-                icon: Icon(Icons.tune, color: theme.colorScheme.onSurface),
-                tooltip: 'Quality Presets',
-                onSelected: (value) {
-                  final updatedSettings = Map<String, dynamic>.from(
-                    qualitySettings,
-                  );
-                  updatedSettings['max_colors'] = value;
-                  onChanged(key, updatedSettings);
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 64,
-                    child: Text('Low (64 colors)'),
-                  ),
-                  const PopupMenuItem(
-                    value: 128,
-                    child: Text('Medium (128 colors)'),
-                  ),
-                  const PopupMenuItem(
-                    value: 192,
-                    child: Text('High (192 colors)'),
-                  ),
-                  const PopupMenuItem(
-                    value: 256,
-                    child: Text('Ultra (256 colors)'),
+              Row(
+                children: [
+                  Icon(Icons.palette, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Quality Settings',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+
+              // Max Colors
+              Text(
+                'Max Colors: $currentMaxColors',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: currentMaxColors.toDouble(),
+                      min: 16,
+                      max: 256,
+                      divisions: 15,
+                      label: currentMaxColors.toString(),
+                      onChanged: (value) {
+                        final updatedSettings = Map<String, dynamic>.from(
+                          qualitySettings,
+                        );
+                        updatedSettings['max_colors'] = value.round();
+                        currentMaxColors = value.round();
+                        setState(() {});
+                        onChanged(key, updatedSettings);
+                      },
+                    ),
+                  ),
+                  PopupMenuButton<int>(
+                    icon: Icon(Icons.tune, color: theme.colorScheme.onSurface),
+                    tooltip: 'Quality Presets',
+                    onSelected: (value) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        qualitySettings,
+                      );
+                      updatedSettings['max_colors'] = value;
+                      currentMaxColors = value;
+                      setState(() {});
+                      onChanged(key, updatedSettings);
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 64,
+                        child: Text('Low (64 colors)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 128,
+                        child: Text('Medium (128 colors)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 192,
+                        child: Text('High (192 colors)'),
+                      ),
+                      const PopupMenuItem(
+                        value: 256,
+                        child: Text('Ultra (256 colors)'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Palette Mode
+              Text(
+                'Color Palette Mode',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButton<String>(
+                value: currentPaletteMode,
+                isExpanded: true,
+                dropdownColor: theme.colorScheme.surface,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'adaptive',
+                    child: Text('Adaptive (Best Quality)'),
+                  ),
+                  DropdownMenuItem(value: 'web_safe', child: Text('Web Safe')),
+                  DropdownMenuItem(
+                    value: 'grayscale',
+                    child: Text('Grayscale'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'high_contrast',
+                    child: Text('High Contrast'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    final updatedSettings = Map<String, dynamic>.from(
+                      qualitySettings,
+                    );
+                    updatedSettings['palette_mode'] = value;
+                    currentPaletteMode = value;
+                    setState(() {});
+                    onChanged(key, updatedSettings);
+                  }
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              // Optimization
+              Text(
+                'Optimization Priority',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButton<String>(
+                value: currentOptimization,
+                isExpanded: true,
+                dropdownColor: theme.colorScheme.surface,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'speed',
+                    child: Text('Speed (Faster Processing)'),
+                  ),
+                  DropdownMenuItem(value: 'balanced', child: Text('Balanced')),
+                  DropdownMenuItem(
+                    value: 'size',
+                    child: Text('File Size (Better Compression)'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'quality',
+                    child: Text('Quality (Best Visual Result)'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    final updatedSettings = Map<String, dynamic>.from(
+                      qualitySettings,
+                    );
+                    updatedSettings['optimization'] = value;
+                    currentOptimization = value;
+                    setState(() {});
+                    onChanged(key, updatedSettings);
+                  }
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              // Dithering toggle
+              SwitchListTile(
+                title: Text(
+                  'Enable Dithering',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                subtitle: Text(
+                  'Improves color gradients but increases file size',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                value: currentDithering,
+                onChanged: (value) {
+                  final updatedSettings = Map<String, dynamic>.from(
+                    qualitySettings,
+                  );
+                  updatedSettings['dithering'] = value;
+                  currentDithering = value;
+                  setState(() {});
+                  onChanged(key, updatedSettings);
+                },
+              ),
             ],
           ),
-
-          const SizedBox(height: 16),
-
-          // Palette Mode
-          Text(
-            'Color Palette Mode',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          DropdownButton<String>(
-            value: qualitySettings['palette_mode'],
-            isExpanded: true,
-            dropdownColor: theme.colorScheme.surface,
-            items: const [
-              DropdownMenuItem(
-                value: 'adaptive',
-                child: Text('Adaptive (Best Quality)'),
-              ),
-              DropdownMenuItem(value: 'web_safe', child: Text('Web Safe')),
-              DropdownMenuItem(value: 'grayscale', child: Text('Grayscale')),
-              DropdownMenuItem(
-                value: 'high_contrast',
-                child: Text('High Contrast'),
-              ),
-            ],
-            onChanged: (value) {
-              if (value != null) {
-                final updatedSettings = Map<String, dynamic>.from(
-                  qualitySettings,
-                );
-                updatedSettings['palette_mode'] = value;
-                onChanged(key, updatedSettings);
-              }
-            },
-          ),
-
-          const SizedBox(height: 16),
-
-          // Optimization
-          Text(
-            'Optimization Priority',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          DropdownButton<String>(
-            value: qualitySettings['optimization'],
-            isExpanded: true,
-            dropdownColor: theme.colorScheme.surface,
-            items: const [
-              DropdownMenuItem(
-                value: 'speed',
-                child: Text('Speed (Faster Processing)'),
-              ),
-              DropdownMenuItem(value: 'balanced', child: Text('Balanced')),
-              DropdownMenuItem(
-                value: 'size',
-                child: Text('File Size (Smaller Output)'),
-              ),
-            ],
-            onChanged: (value) {
-              if (value != null) {
-                final updatedSettings = Map<String, dynamic>.from(
-                  qualitySettings,
-                );
-                updatedSettings['optimization'] = value;
-                onChanged(key, updatedSettings);
-              }
-            },
-          ),
-
-          const SizedBox(height: 16),
-
-          // Dithering toggle
-          SwitchListTile(
-            title: Text('Enable Dithering', style: theme.textTheme.bodyMedium),
-            subtitle: Text(
-              'Improves color gradients but increases file size',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
-            value: qualitySettings['dithering'],
-            onChanged: (value) {
-              final updatedSettings = Map<String, dynamic>.from(
-                qualitySettings,
-              );
-              updatedSettings['dithering'] = value;
-              onChanged(key, updatedSettings);
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -4658,91 +4753,134 @@ class VideoToGifTool extends Tool {
     final outputSettings = value as Map<String, dynamic>;
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
-        borderRadius: BorderRadius.circular(12),
-        color: theme.colorScheme.surface,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return StatefulBuilder(
+      builder: (context, setState) {
+        int currentLoopCount = outputSettings['loop_count'] as int? ?? -1;
+        String currentFilenamePrefix =
+            outputSettings['filename_prefix'] as String? ?? 'video_to_gif';
+        bool currentPreviewEnabled =
+            outputSettings['preview_enabled'] as bool? ?? true;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: theme.colorScheme.outline.withOpacity(0.5),
+            ),
+            borderRadius: BorderRadius.circular(12),
+            color: theme.colorScheme.surface,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.settings, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
+              Row(
+                children: [
+                  Icon(Icons.settings, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Output Settings',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Loop Count
               Text(
-                'Output Settings',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+                'Loop Count: ${currentLoopCount == -1
+                    ? 'Infinite'
+                    : currentLoopCount == 0
+                    ? 'No Loop'
+                    : currentLoopCount}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
                 ),
+              ),
+              Slider(
+                value: (currentLoopCount + 1)
+                    .toDouble(), // Shift by 1 for slider
+                min: 0,
+                max: 11,
+                divisions: 11,
+                label: currentLoopCount == -1
+                    ? 'Infinite'
+                    : currentLoopCount == 0
+                    ? 'No Loop'
+                    : currentLoopCount.toString(),
+                onChanged: (value) {
+                  final updatedSettings = Map<String, dynamic>.from(
+                    outputSettings,
+                  );
+                  updatedSettings['loop_count'] =
+                      value.round() - 1; // Shift back
+                  currentLoopCount = value.round() - 1;
+                  setState(() {});
+                  onChanged(key, updatedSettings);
+                },
+              ),
+              Text(
+                currentLoopCount == -1
+                    ? 'GIF will loop infinitely'
+                    : currentLoopCount == 0
+                    ? 'GIF will play once and stop'
+                    : 'GIF will loop $currentLoopCount times',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Filename Prefix
+              TextFormField(
+                key: ValueKey('filename_$currentFilenamePrefix'),
+                initialValue: currentFilenamePrefix,
+                decoration: InputDecoration(
+                  labelText: 'Filename Prefix',
+                  hintText: 'video_to_gif',
+                  border: const OutlineInputBorder(),
+                  fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  filled: true,
+                ),
+                onChanged: (value) {
+                  final updatedSettings = Map<String, dynamic>.from(
+                    outputSettings,
+                  );
+                  updatedSettings['filename_prefix'] = value;
+                  currentFilenamePrefix = value;
+                  setState(() {});
+                  onChanged(key, updatedSettings);
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              // Preview toggle
+              SwitchListTile(
+                title: Text('Show Preview', style: theme.textTheme.bodyMedium),
+                subtitle: Text(
+                  'Display the generated GIF in results',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                value: currentPreviewEnabled,
+                onChanged: (value) {
+                  final updatedSettings = Map<String, dynamic>.from(
+                    outputSettings,
+                  );
+                  updatedSettings['preview_enabled'] = value;
+                  currentPreviewEnabled = value;
+                  setState(() {});
+                  onChanged(key, updatedSettings);
+                },
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // Loop Count
-          Text(
-            'Loop Count: ${outputSettings['loop_count'] == 0 ? 'Infinite' : outputSettings['loop_count']}',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          Slider(
-            value: (outputSettings['loop_count'] as int).toDouble(),
-            min: 0,
-            max: 10,
-            divisions: 10,
-            label: outputSettings['loop_count'] == 0
-                ? 'Infinite'
-                : outputSettings['loop_count'].toString(),
-            onChanged: (value) {
-              final updatedSettings = Map<String, dynamic>.from(outputSettings);
-              updatedSettings['loop_count'] = value.round();
-              onChanged(key, updatedSettings);
-            },
-          ),
-
-          const SizedBox(height: 16),
-
-          // Filename Prefix
-          TextFormField(
-            initialValue: outputSettings['filename_prefix'],
-            decoration: InputDecoration(
-              labelText: 'Filename Prefix',
-              hintText: 'video_to_gif',
-              border: const OutlineInputBorder(),
-              fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-              filled: true,
-            ),
-            onChanged: (value) {
-              final updatedSettings = Map<String, dynamic>.from(outputSettings);
-              updatedSettings['filename_prefix'] = value;
-              onChanged(key, updatedSettings);
-            },
-          ),
-
-          const SizedBox(height: 16),
-
-          // Preview toggle
-          SwitchListTile(
-            title: Text('Show Preview', style: theme.textTheme.bodyMedium),
-            subtitle: Text(
-              'Display the generated GIF in results',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
-            value: outputSettings['preview_enabled'],
-            onChanged: (value) {
-              final updatedSettings = Map<String, dynamic>.from(outputSettings);
-              updatedSettings['preview_enabled'] = value;
-              onChanged(key, updatedSettings);
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -4804,11 +4942,18 @@ class VideoToGifTool extends Tool {
     final optimization = qualitySettings['optimization'] as String;
     final loopCount = outputSettings['loop_count'] as int;
 
-    final ditherMode = dithering ? 'bayer:bayer_scale=3' : 'none';
+    final ditherMode = dithering ? 'bayer:bayer_scale=2' : 'none';
 
     // Build filter chain
     List<String> baseFilters = ['fps=$fps'];
-    baseFilters.add('scale=$width:-1:flags=lanczos');
+
+    // Handle width scaling
+    if (width == -1) {
+      // Keep original size, but still apply fps filter
+      baseFilters.add('scale=iw:ih:flags=lanczos');
+    } else {
+      baseFilters.add('scale=$width:-1:flags=lanczos');
+    }
 
     // Add specific filters based on palette mode
     switch (paletteMode) {
@@ -4816,13 +4961,13 @@ class VideoToGifTool extends Tool {
         baseFilters.add('format=gray');
         break;
       case 'high_contrast':
-        baseFilters.add('eq=contrast=1.3:brightness=0.1');
+        baseFilters.add('eq=contrast=1.5:brightness=0.1:saturation=1.2');
         break;
     }
 
     final videoFilters = baseFilters.join(',');
 
-    // Palette generation filter - use safer parameters
+    // Palette generation filter with optimization-specific parameters
     String paletteFilter;
     switch (paletteMode) {
       case 'web_safe':
@@ -4836,11 +4981,37 @@ class VideoToGifTool extends Tool {
         paletteFilter = 'palettegen=max_colors=$maxColors:stats_mode=diff';
     }
 
-    // Build the complete filter_complex string
-    final filterComplex =
-        '[0:v] $videoFilters [v]; [v] $paletteFilter [p]; [v][p] paletteuse=dither=$ditherMode';
+    // Apply optimization-specific palette settings
+    switch (optimization) {
+      case 'quality':
+        paletteFilter += ':use_alpha=1';
+        break;
+      case 'size':
+        paletteFilter += ':reserve_transparent=1';
+        break;
+    }
 
-    // Build FFmpeg arguments with safer parameters
+    // Build the complete filter_complex string with optimization tweaks
+    String paletteUseFilter = 'paletteuse=dither=$ditherMode';
+
+    switch (optimization) {
+      case 'quality':
+        paletteUseFilter += ':diff_mode=rectangle:alpha_threshold=128';
+        break;
+      case 'size':
+        paletteUseFilter += ':diff_mode=rectangle:new=1';
+        break;
+      case 'speed':
+        paletteUseFilter += ':diff_mode=none';
+        break;
+      default: // balanced
+        paletteUseFilter += ':diff_mode=rectangle';
+    }
+
+    final filterComplex =
+        '[0:v] $videoFilters [v]; [v] $paletteFilter [p]; [v][p] $paletteUseFilter';
+
+    // Build FFmpeg arguments
     List<String> args = [
       '-y', // Overwrite output
       '-ss', startTime.toString(),
@@ -4849,21 +5020,31 @@ class VideoToGifTool extends Tool {
       '-filter_complex', filterComplex,
     ];
 
-    // Add optimization-specific parameters
+    // Add optimization-specific encoding parameters
     switch (optimization) {
       case 'speed':
-        args.addAll(['-preset', 'ultrafast']);
+        args.addAll(['-threads', '0', '-preset', 'ultrafast']);
         break;
       case 'size':
         args.addAll(['-preset', 'veryslow']);
+        break;
+      case 'quality':
+        args.addAll(['-preset', 'slow']);
         break;
       default: // balanced
         args.addAll(['-preset', 'medium']);
     }
 
-    // Loop count (must come before output file)
-    if (loopCount > 0) {
-      args.addAll(['-loop', loopCount.toString()]);
+    // Loop count handling - FFmpeg uses different syntax
+    if (loopCount == -1) {
+      // Infinite loop (default for GIF)
+      args.addAll(['-loop', '0']);
+    } else if (loopCount == 0) {
+      // No loop - play once
+      args.addAll(['-loop', '1']);
+    } else {
+      // Specific number of loops
+      args.addAll(['-loop', (loopCount + 1).toString()]);
     }
 
     args.add(outputGif.path);
@@ -4902,14 +5083,30 @@ class VideoToGifTool extends Tool {
       yield '**Output GIF**: `${path.basename(outputGif.path)}`  \n';
       yield '**Start Time**: ${videoSettings['start_time']}s  \n';
       yield '**Duration**: ${videoSettings['duration']}s  \n';
-      yield '**Dimensions**: ${videoSettings['width']}px wide  \n';
+
+      final width = videoSettings['width'] as int;
+      if (width == -1) {
+        yield '**Dimensions**: Original size (auto)  \n';
+      } else {
+        yield '**Dimensions**: ${width}px wide  \n';
+      }
+
       yield '**Frame Rate**: ${videoSettings['fps']} FPS  \n';
       yield '**Max Colors**: ${qualitySettings['max_colors']}  \n';
       yield '**Palette Mode**: ${qualitySettings['palette_mode']}  \n';
       yield '**Optimization**: ${qualitySettings['optimization']}  \n';
       yield '**Dithering**: ${qualitySettings['dithering'] ? 'Enabled' : 'Disabled'}  \n';
-      yield '**Loop Count**: ${outputSettings['loop_count'] == 0 ? 'Infinite' : outputSettings['loop_count']}  \n\n';
-      yield '---\n\n';
+
+      final loopCount = outputSettings['loop_count'] as int;
+      if (loopCount == -1) {
+        yield '**Loop Count**: Infinite  \n';
+      } else if (loopCount == 0) {
+        yield '**Loop Count**: No loop (play once)  \n';
+      } else {
+        yield '**Loop Count**: $loopCount times  \n';
+      }
+
+      yield '\n---\n\n';
       yield '## 🔄 Processing...\n\n';
 
       // Build FFmpeg arguments
@@ -4956,7 +5153,15 @@ class VideoToGifTool extends Tool {
         yield '- **Colors Used**: Up to ${qualitySettings['max_colors']} colors\n';
         yield '- **Palette Mode**: ${qualitySettings['palette_mode']}\n';
         yield '- **Dithering**: ${qualitySettings['dithering'] ? 'Applied for smoother gradients' : 'Disabled for sharper edges'}\n';
-        yield '- **Optimization**: ${qualitySettings['optimization']} priority\n\n';
+        yield '- **Optimization**: ${qualitySettings['optimization']} priority\n';
+        yield '- **Frame Rate**: ${videoSettings['fps']} FPS\n';
+
+        if (width == -1) {
+          yield '- **Dimensions**: Original video size preserved\n';
+        } else {
+          yield '- **Dimensions**: Scaled to ${width}px wide\n';
+        }
+        yield '\n';
 
         // Show preview if enabled
         if (outputSettings['preview_enabled'] as bool) {
@@ -4974,18 +5179,20 @@ class VideoToGifTool extends Tool {
 
         yield '💡 **Tips**:\n';
         yield '- The GIF is saved in the app\'s temp directory and will be automatically cleaned up after 24 hours\n';
-        yield '- For smaller file sizes, try reducing max colors or disabling dithering\n';
-        yield '- For better quality, increase max colors or enable dithering\n';
-        yield '- Use "size" optimization priority for the smallest possible files\n';
+        yield '- For smaller file sizes, try reducing max colors, FPS, or use "size" optimization\n';
+        yield '- For better quality, increase max colors, use "quality" optimization, or enable dithering\n';
+        yield '- Use "Auto" width to keep original video dimensions\n';
+        yield '- Lower FPS (10-15) works well for most content and reduces file size significantly\n';
       } else {
         yield '❌ **Failed**: No output file generated or conversion failed.\n\n';
 
         // Provide troubleshooting tips
         yield '### 🔧 Troubleshooting:\n';
-        yield '- Try reducing the max colors setting (FFmpeg error -34 often indicates too many colors)\n';
-        yield '- Ensure the video file is not corrupted\n';
+        yield '- Try reducing the max colors setting (values above 256 may cause issues)\n';
+        yield '- Ensure the video file is not corrupted and in a supported format\n';
         yield '- Try a shorter duration for the GIF\n';
-        yield '- Check that FFmpeg is properly installed and accessible\n\n';
+        yield '- Check that FFmpeg is properly installed and accessible\n';
+        yield '- Try using "balanced" or "speed" optimization if "quality" fails\n\n';
       }
     } catch (e) {
       yield '❌ **Error**: $e\n\n';

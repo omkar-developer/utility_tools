@@ -256,19 +256,30 @@ class _JsScriptLibraryDialogState extends State<JsScriptLibraryDialog> {
     try {
       final lines = str.split('\n');
       String? id;
+      String? category;
 
-      // Check for UUID on the first line
-      if (lines.isNotEmpty && lines.first.startsWith('//uuid:')) {
-        id = lines.first.substring('//uuid:'.length).trim();
-        lines.removeAt(0); // remove the uuid comment
+      // Check for UUID and category on the first lines
+      while (lines.isNotEmpty) {
+        if (lines.first.startsWith('//uuid:')) {
+          id = lines.first.substring('//uuid:'.length).trim();
+          lines.removeAt(0);
+        } else if (lines.first.startsWith('//category:')) {
+          category = lines.first.substring('//category:'.length).trim();
+          lines.removeAt(0);
+        } else {
+          break; // No more metadata comments
+        }
       }
 
       final scriptBody = lines.join('\n');
       final script = JsScript.fromScript(scriptBody);
 
-      // Override with existing id if found
+      // Override with existing id and category if found
       if (id != null && id.isNotEmpty) {
         script.id = id;
+      }
+      if (category != null && category.isNotEmpty) {
+        script.category = category;
       }
 
       await JsScriptService.saveScript(script);
@@ -309,21 +320,43 @@ class _JsScriptLibraryDialogState extends State<JsScriptLibraryDialog> {
           try {
             var content = String.fromCharCodes(file.content as List<int>);
             String? extractedId;
+            String? extractedCategory;
 
-            // Check for //uuid:<id> at the very top
-            final uuidPattern = RegExp(r'^//uuid:([^\r\n]+)');
-            final match = uuidPattern.firstMatch(content);
-            if (match != null) {
-              extractedId = match.group(1);
-              // Remove uuid line before parsing as script
-              content = content.substring(match.end).trimLeft();
+            // Check for metadata comments at the very top
+            final lines = content.split('\n');
+            var metadataLines = 0;
+
+            for (int i = 0; i < lines.length; i++) {
+              if (lines[i].startsWith('//uuid:')) {
+                extractedId = lines[i].substring('//uuid:'.length).trim();
+                metadataLines = i + 1;
+              } else if (lines[i].startsWith('//category:')) {
+                extractedCategory = lines[i]
+                    .substring('//category:'.length)
+                    .trim();
+                metadataLines = i + 1;
+              } else if (lines[i].startsWith('//')) {
+                // Skip other comment lines at the top
+                continue;
+              } else {
+                // First non-comment line, stop looking for metadata
+                break;
+              }
+            }
+
+            // Remove metadata lines from content
+            if (metadataLines > 0) {
+              content = lines.skip(metadataLines).join('\n').trimLeft();
             }
 
             final script = JsScript.fromScript(content);
 
-            // Restore existing UUID if present, else generate new
+            // Restore existing UUID and category if present
             if (extractedId != null) {
               script.id = extractedId;
+            }
+            if (extractedCategory != null) {
+              script.category = extractedCategory;
             }
 
             importedScripts.add(script);
@@ -365,7 +398,8 @@ Future<void> _exportScript(BuildContext context, JsScript script) async {
   try {
     final filename = '${script.name}.js';
 
-    final content = '//uuid:${script.id}\n${script.script}';
+    final content =
+        '//uuid:${script.id}\n//category:${script.category}\n${script.script}';
 
     await FileExporter.saveTextFile(content, filename);
 
@@ -397,8 +431,9 @@ Future<void> _exportScriptsAsZip(
     final archive = Archive();
 
     for (final script in scripts) {
-      // Prepend UUID as comment at the top
-      final content = '//uuid:${script.id}\n${script.script}';
+      // Prepend UUID and category as comments at the top
+      final content =
+          '//uuid:${script.id}\n//category:${script.category}\n${script.script}';
       final bytes = Uint8List.fromList(content.codeUnits);
 
       // Save inside "scripts_library/" folder
