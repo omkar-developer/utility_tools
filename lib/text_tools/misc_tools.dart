@@ -5227,7 +5227,7 @@ Map<String, List<Tool Function()>> getMiscTools() {
       () => ColorPaletteGenerator(),
       () => NinePatchUITool(),
       () => CustomControlTestTool(),
-      () => VideoToGifTool(),
+      if (!kIsWeb) () => VideoToGifTool(),
     ],
   };
 }
