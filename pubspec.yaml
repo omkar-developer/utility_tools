@@ -69,6 +69,7 @@ dependencies:
   image: ^4.5.4
   archive: ^4.0.7
   url_launcher: ^6.3.2
+  desktop_drop: ^0.6.1
 
 
 dev_dependencies:

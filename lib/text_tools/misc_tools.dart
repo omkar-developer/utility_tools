@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
@@ -4096,16 +4098,178 @@ class VideoToGifTool extends Tool {
 
     return StatefulBuilder(
       builder: (context, setState) {
-        // Get current values for local state
         int currentWidth = videoSettings['width'] as int? ?? -1;
         int currentFps = videoSettings['fps'] as int? ?? 15;
+        bool isDragging = false;
+
+        // Helper method to process video file
+        Future<void> processVideoFile(String filePath) async {
+          try {
+            // Check if file exists
+            final file = File(filePath);
+            if (!await file.exists()) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('File not found: ${path.basename(filePath)}'),
+                    backgroundColor: theme.colorScheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+
+            // Get video duration
+            final duration = await _getVideoDuration(filePath);
+
+            // Update the settings map
+            final updatedSettings = Map<String, dynamic>.from(videoSettings);
+            updatedSettings['file_path'] = filePath;
+            updatedSettings['video_duration'] = duration;
+            updatedSettings['start_time'] = 0.0;
+            updatedSettings['duration'] = duration.clamp(0.0, 30.0);
+
+            setState(() {});
+            onChanged(key, updatedSettings);
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Video loaded: ${path.basename(filePath)}'),
+                  backgroundColor: theme.colorScheme.primary,
+                ),
+              );
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error loading video: $e'),
+                  backgroundColor: theme.colorScheme.error,
+                ),
+              );
+            }
+          }
+        }
+
+        // Helper method to handle clipboard paste
+        Future<void> handlePaste() async {
+          try {
+            // First try to get files from clipboard
+            final clipboardFiles = await Pasteboard.files();
+
+            if (clipboardFiles.isNotEmpty) {
+              // Found files in clipboard - use the first video file
+              for (final filePath in clipboardFiles) {
+                if (filePath.toLowerCase().contains('.mp4') ||
+                    filePath.toLowerCase().contains('.mov') ||
+                    filePath.toLowerCase().contains('.avi') ||
+                    filePath.toLowerCase().contains('.mkv') ||
+                    filePath.toLowerCase().contains('.webm') ||
+                    filePath.toLowerCase().contains('.m4v') ||
+                    filePath.toLowerCase().contains('.flv')) {
+                  await processVideoFile(filePath);
+                  return; // Success, exit
+                }
+              }
+
+              // No video files found
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Found ${clipboardFiles.length} files, but no video files',
+                    ),
+                    backgroundColor: theme.colorScheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+
+            // Fallback to text-based clipboard (for URLs or manual paths)
+            final clipboardData = await Pasteboard.text;
+            if (clipboardData == null || clipboardData.isEmpty) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Clipboard is empty')),
+                );
+              }
+              return;
+            }
+
+            String processedPath = clipboardData.trim();
+
+            // Handle different path formats
+            if (processedPath.startsWith('file:///')) {
+              processedPath = processedPath.substring(8);
+            } else if (processedPath.startsWith('file://')) {
+              processedPath = processedPath.substring(7);
+            }
+
+            // Check if it's a URL
+            if (processedPath.startsWith('http://') ||
+                processedPath.startsWith('https://')) {
+              // Handle URLs - FFmpeg can process URLs directly
+              final updatedSettings = Map<String, dynamic>.from(videoSettings);
+              updatedSettings['file_path'] = processedPath;
+              updatedSettings['video_duration'] = 30.0; // Default for URLs
+              updatedSettings['start_time'] = 0.0;
+              updatedSettings['duration'] = 10.0; // Conservative default
+
+              setState(() {});
+              onChanged(key, updatedSettings);
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'URL loaded (duration estimation may be inaccurate)',
+                    ),
+                    backgroundColor: theme.colorScheme.tertiary,
+                  ),
+                );
+              }
+              return;
+            }
+
+            // Check if it's a valid file path
+            if (processedPath.isNotEmpty &&
+                (processedPath.toLowerCase().contains('.mp4') ||
+                    processedPath.toLowerCase().contains('.mov') ||
+                    processedPath.toLowerCase().contains('.avi') ||
+                    processedPath.toLowerCase().contains('.mkv') ||
+                    processedPath.toLowerCase().contains('.webm') ||
+                    processedPath.toLowerCase().contains('.m4v') ||
+                    processedPath.toLowerCase().contains('.flv'))) {
+              await processVideoFile(processedPath);
+            } else {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Clipboard doesn\'t contain a valid video file path or URL',
+                    ),
+                  ),
+                );
+              }
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error pasting: $e'),
+                  backgroundColor: theme.colorScheme.error,
+                ),
+              );
+            }
+          }
+        }
 
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            border: Border.all(
-              color: theme.colorScheme.outline.withOpacity(0.5),
-            ),
+            border: Border.all(color: theme.colorScheme.outline.withAlpha(130)),
             borderRadius: BorderRadius.circular(12),
             color: theme.colorScheme.surface,
           ),
@@ -4127,143 +4291,261 @@ class VideoToGifTool extends Tool {
               ),
               const SizedBox(height: 16),
 
-              // File picker section
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: theme.colorScheme.outline.withOpacity(0.3),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: kIsWeb
-                              ? null
-                              : () async {
-                                  try {
-                                    FilePickerResult? result = await FilePicker
-                                        .platform
-                                        .pickFiles(
-                                          type: FileType.video,
-                                          allowMultiple: false,
-                                        );
-
-                                    if (result != null &&
-                                        result.files.single.path != null) {
-                                      final newPath = result.files.single.path!;
-
-                                      // Get video duration
-                                      final duration = await _getVideoDuration(
-                                        newPath,
-                                      );
-
-                                      // Update the settings map
-                                      final updatedSettings =
-                                          Map<String, dynamic>.from(
-                                            videoSettings,
-                                          );
-                                      updatedSettings['file_path'] = newPath;
-                                      updatedSettings['video_duration'] =
-                                          duration;
-                                      updatedSettings['start_time'] = 0.0;
-                                      updatedSettings['duration'] = duration
-                                          .clamp(0.0, 30.0);
-
-                                      setState(() {}); // rebuild UI
-                                      onChanged(key, updatedSettings);
-                                    }
-                                  } catch (e) {
-                                    print('Error picking file: $e');
-                                  }
-                                },
-                          icon: const Icon(Icons.video_file, size: 20),
-                          label: Text(
-                            selectedVideoPath == null
-                                ? 'Choose Video'
-                                : 'Change Video',
+              // Enhanced file picker section with drag & drop
+              DropTarget(
+                onDragDone: (details) async {
+                  if (details.files.isNotEmpty) {
+                    final file = details.files.first;
+                    await processVideoFile(file.path);
+                  }
+                  setState(() => isDragging = false);
+                },
+                onDragEntered: (details) {
+                  setState(() => isDragging = true);
+                },
+                onDragExited: (details) {
+                  setState(() => isDragging = false);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDragging
+                        ? theme.colorScheme.primaryContainer.withAlpha(120)
+                        : theme.colorScheme.surfaceContainerHighest.withAlpha(
+                            80,
                           ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: selectedVideoPath == null
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.secondary,
-                            foregroundColor: theme.colorScheme.onPrimary,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDragging
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outline.withAlpha(80),
+                      width: isDragging ? 2 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Button row
+                      Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: kIsWeb
+                                ? null
+                                : () async {
+                                    try {
+                                      FilePickerResult? result =
+                                          await FilePicker.platform.pickFiles(
+                                            type: FileType.video,
+                                            allowMultiple: false,
+                                          );
+
+                                      if (result != null &&
+                                          result.files.single.path != null) {
+                                        await processVideoFile(
+                                          result.files.single.path!,
+                                        );
+                                      }
+                                    } catch (e) {
+                                      print('Error picking file: $e');
+                                    }
+                                  },
+                            icon: const Icon(Icons.video_file, size: 20),
+                            label: Text(
+                              selectedVideoPath == null
+                                  ? 'Choose Video'
+                                  : 'Change Video',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: selectedVideoPath == null
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.secondary,
+                              foregroundColor: theme.colorScheme.onPrimary,
                             ),
                           ),
-                        ),
-                        if (kIsWeb) ...[
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'File picker not available on web',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.error,
+
+                          const SizedBox(width: 8),
+
+                          // Paste button
+                          OutlinedButton.icon(
+                            onPressed: handlePaste,
+                            icon: const Icon(Icons.content_paste, size: 18),
+                            label: const Text('Paste'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: theme.colorScheme.primary,
+                              side: BorderSide(
+                                color: theme.colorScheme.primary,
                               ),
                             ),
                           ),
-                        ],
-                      ],
-                    ),
 
-                    if (selectedVideoPath != null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer.withOpacity(
-                            0.5,
-                          ),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: theme.colorScheme.primary.withOpacity(0.3),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.check_circle,
-                                  color: theme.colorScheme.primary,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    path.basename(selectedVideoPath),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color:
-                                          theme.colorScheme.onPrimaryContainer,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                          if (kIsWeb) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'File picker limited on web - try paste or URL',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurface.withAlpha(
+                                    150,
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Duration: ${videoDuration.toStringAsFixed(1)}s',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onPrimaryContainer
-                                    .withOpacity(0.8),
+                          ],
+                        ],
+                      ),
+
+                      // Drag & drop hint
+                      if (!kIsWeb && Platform.isWindows ||
+                          Platform.isMacOS ||
+                          Platform.isLinux) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isDragging
+                                ? theme.colorScheme.primary.withAlpha(40)
+                                : theme.colorScheme.surfaceContainerHighest
+                                      .withAlpha(60),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: theme.colorScheme.outline.withAlpha(60),
+                              style: BorderStyle.solid,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isDragging
+                                    ? Icons.file_download
+                                    : Icons.drag_indicator,
+                                size: 16,
+                                color: isDragging
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface.withAlpha(
+                                        150,
+                                      ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  isDragging
+                                      ? 'Drop video file here...'
+                                      : 'Or drag & drop a video file here',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: isDragging
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurface.withAlpha(
+                                            150,
+                                          ),
+                                    fontStyle: isDragging
+                                        ? FontStyle.normal
+                                        : FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      // URL input hint
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.tertiaryContainer.withAlpha(
+                            80,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 14,
+                              color: theme.colorScheme.onTertiaryContainer,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'Paste button accepts file paths, URLs, or clipboard paths from screen capture tools',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onTertiaryContainer,
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
+
+                      // Current file display
+                      if (selectedVideoPath != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer.withAlpha(
+                              120,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withAlpha(80),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    selectedVideoPath!.startsWith('http')
+                                        ? Icons.link
+                                        : Icons.check_circle,
+                                    color: theme.colorScheme.primary,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      selectedVideoPath!.startsWith('http')
+                                          ? 'URL: ${Uri.parse(selectedVideoPath!).host}'
+                                          : path.basename(selectedVideoPath!),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onPrimaryContainer,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                selectedVideoPath!.startsWith('http')
+                                    ? 'Duration: Estimated (actual may vary)'
+                                    : 'Duration: ${videoDuration.toStringAsFixed(1)}s',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onPrimaryContainer
+                                      .withAlpha(200),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
+
+              // Rest of your existing controls (width, time range, FPS)...
+              // [Keep all the existing width, time range, and FPS controls exactly as they are]
 
               // Width control section
               if (selectedVideoPath != null) ...[
@@ -4271,10 +4553,12 @@ class VideoToGifTool extends Tool {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                    color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+                      80,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: theme.colorScheme.outline.withOpacity(0.3),
+                      color: theme.colorScheme.outline.withAlpha(80),
                     ),
                   ),
                   child: Column(
@@ -4378,7 +4662,7 @@ class VideoToGifTool extends Tool {
                             ? 'Keep original video dimensions'
                             : 'Height will be auto-scaled to maintain aspect ratio',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withAlpha(150),
                         ),
                       ),
                     ],
@@ -4392,10 +4676,12 @@ class VideoToGifTool extends Tool {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                    color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+                      80,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: theme.colorScheme.outline.withOpacity(0.3),
+                      color: theme.colorScheme.outline.withAlpha(80),
                     ),
                   ),
                   child: Column(
@@ -4462,10 +4748,12 @@ class VideoToGifTool extends Tool {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+                    80,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: theme.colorScheme.outline.withOpacity(0.3),
+                    color: theme.colorScheme.outline.withAlpha(80),
                   ),
                 ),
                 child: Column(
@@ -4497,7 +4785,7 @@ class VideoToGifTool extends Tool {
                     Text(
                       'Lower FPS = smaller file size, Higher FPS = smoother motion',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface.withAlpha(150),
                       ),
                     ),
                   ],
@@ -4509,7 +4797,7 @@ class VideoToGifTool extends Tool {
                 Text(
                   hint['help'],
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withAlpha(150),
                   ),
                 ),
               ],
@@ -4542,9 +4830,7 @@ class VideoToGifTool extends Tool {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            border: Border.all(
-              color: theme.colorScheme.outline.withOpacity(0.5),
-            ),
+            border: Border.all(color: theme.colorScheme.outline.withAlpha(150)),
             borderRadius: BorderRadius.circular(12),
             color: theme.colorScheme.surface,
           ),
@@ -4722,7 +5008,7 @@ class VideoToGifTool extends Tool {
                 subtitle: Text(
                   'Improves color gradients but increases file size',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withAlpha(150),
                   ),
                 ),
                 value: currentDithering,
@@ -4764,9 +5050,7 @@ class VideoToGifTool extends Tool {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            border: Border.all(
-              color: theme.colorScheme.outline.withOpacity(0.5),
-            ),
+            border: Border.all(color: theme.colorScheme.outline.withAlpha(150)),
             borderRadius: BorderRadius.circular(12),
             color: theme.colorScheme.surface,
           ),
@@ -4827,7 +5111,7 @@ class VideoToGifTool extends Tool {
                     ? 'GIF will play once and stop'
                     : 'GIF will loop $currentLoopCount times',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withAlpha(150),
                 ),
               ),
 
@@ -4841,7 +5125,8 @@ class VideoToGifTool extends Tool {
                   labelText: 'Filename Prefix',
                   hintText: 'video_to_gif',
                   border: const OutlineInputBorder(),
-                  fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                  fillColor: theme.colorScheme.surfaceContainerHighest
+                      .withAlpha(80),
                   filled: true,
                 ),
                 onChanged: (value) {
@@ -4863,7 +5148,7 @@ class VideoToGifTool extends Tool {
                 subtitle: Text(
                   'Display the generated GIF in results',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withAlpha(150),
                   ),
                 ),
                 value: currentPreviewEnabled,
@@ -4896,7 +5181,7 @@ class VideoToGifTool extends Tool {
         Text(
           label,
           style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            color: theme.colorScheme.onSurface.withAlpha(150),
           ),
         ),
         Text(
@@ -4915,6 +5200,11 @@ class VideoToGifTool extends Tool {
     final tempDir = Directory(
       path.join(appDocDir.path, 'utility_tools', 'temp'),
     );
+
+    // Ensure temp directory exists
+    if (!await tempDir.exists()) {
+      await tempDir.create(recursive: true);
+    }
 
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final filename = '${prefix}_$timestamp.gif';
@@ -4942,74 +5232,102 @@ class VideoToGifTool extends Tool {
     final optimization = qualitySettings['optimization'] as String;
     final loopCount = outputSettings['loop_count'] as int;
 
-    final ditherMode = dithering ? 'bayer:bayer_scale=2' : 'none';
+    // Build filter chain components
+    List<String> videoFilters = [];
 
-    // Build filter chain
-    List<String> baseFilters = ['fps=$fps'];
+    // FIXED: Apply fps filter first
+    videoFilters.add('fps=$fps');
 
-    // Handle width scaling
+    // FIXED: Handle width scaling properly
     if (width == -1) {
-      // Keep original size, but still apply fps filter
-      baseFilters.add('scale=iw:ih:flags=lanczos');
+      // Keep original size with lanczos scaling for quality
+      videoFilters.add('scale=iw:ih:flags=lanczos');
     } else {
-      baseFilters.add('scale=$width:-1:flags=lanczos');
+      // Scale to specific width, maintain aspect ratio
+      videoFilters.add('scale=$width:-1:flags=lanczos');
     }
 
     // Add specific filters based on palette mode
     switch (paletteMode) {
       case 'grayscale':
-        baseFilters.add('format=gray');
+        videoFilters.add('format=gray');
         break;
       case 'high_contrast':
-        baseFilters.add('eq=contrast=1.5:brightness=0.1:saturation=1.2');
+        videoFilters.add('eq=contrast=1.5:brightness=0.1:saturation=1.2');
         break;
     }
 
-    final videoFilters = baseFilters.join(',');
+    final videoFilterChain = videoFilters.join(',');
 
-    // Palette generation filter with optimization-specific parameters
-    String paletteFilter;
+    // FIXED: Build palette generation parameters based on optimization
+    String paletteParams = 'max_colors=$maxColors';
+
     switch (paletteMode) {
       case 'web_safe':
-        paletteFilter =
-            'palettegen=max_colors=$maxColors:reserve_transparent=0:stats_mode=single';
+        paletteParams += ':reserve_transparent=0:stats_mode=single';
         break;
       case 'high_contrast':
-        paletteFilter = 'palettegen=max_colors=$maxColors:stats_mode=diff';
+        paletteParams += ':stats_mode=diff';
         break;
-      default: // adaptive and grayscale
-        paletteFilter = 'palettegen=max_colors=$maxColors:stats_mode=diff';
+      case 'grayscale':
+        paletteParams += ':stats_mode=diff';
+        break;
+      default: // adaptive
+        paletteParams += ':stats_mode=diff';
     }
 
-    // Apply optimization-specific palette settings
+    // FIXED: Apply optimization-specific palette settings
     switch (optimization) {
       case 'quality':
-        paletteFilter += ':use_alpha=1';
+        paletteParams += ':use_alpha=1:stats_mode=full';
         break;
       case 'size':
-        paletteFilter += ':reserve_transparent=1';
-        break;
-    }
-
-    // Build the complete filter_complex string with optimization tweaks
-    String paletteUseFilter = 'paletteuse=dither=$ditherMode';
-
-    switch (optimization) {
-      case 'quality':
-        paletteUseFilter += ':diff_mode=rectangle:alpha_threshold=128';
-        break;
-      case 'size':
-        paletteUseFilter += ':diff_mode=rectangle:new=1';
+        paletteParams += ':reserve_transparent=1';
         break;
       case 'speed':
-        paletteUseFilter += ':diff_mode=none';
+        paletteParams += ':stats_mode=single';
         break;
-      default: // balanced
-        paletteUseFilter += ':diff_mode=rectangle';
     }
 
+    // FIXED: Build dithering parameters properly
+    String ditherParams;
+    if (!dithering) {
+      ditherParams = 'dither=none';
+    } else {
+      switch (optimization) {
+        case 'quality':
+          ditherParams = 'dither=floyd_steinberg';
+          break;
+        case 'size':
+          ditherParams = 'dither=bayer:bayer_scale=1';
+          break;
+        case 'speed':
+          ditherParams = 'dither=bayer:bayer_scale=2';
+          break;
+        default: // balanced
+          ditherParams = 'dither=bayer:bayer_scale=3';
+      }
+    }
+
+    // FIXED: Add optimization-specific paletteuse parameters
+    String paletteUseParams = ditherParams;
+    switch (optimization) {
+      case 'quality':
+        paletteUseParams += ':diff_mode=rectangle:alpha_threshold=128';
+        break;
+      case 'size':
+        paletteUseParams += ':diff_mode=rectangle:new=1';
+        break;
+      case 'speed':
+        paletteUseParams += ':diff_mode=none';
+        break;
+      default: // balanced
+        paletteUseParams += ':diff_mode=rectangle';
+    }
+
+    // FIXED: Proper filter_complex for two-pass palette generation
     final filterComplex =
-        '[0:v] $videoFilters [v]; [v] $paletteFilter [p]; [v][p] $paletteUseFilter';
+        '[0:v]$videoFilterChain,split[v1][v2];[v1]palettegen=$paletteParams[palette];[v2][palette]paletteuse=$paletteUseParams';
 
     // Build FFmpeg arguments
     List<String> args = [
@@ -5020,35 +5338,105 @@ class VideoToGifTool extends Tool {
       '-filter_complex', filterComplex,
     ];
 
-    // Add optimization-specific encoding parameters
+    // FIXED: Add optimization-specific encoding parameters
     switch (optimization) {
       case 'speed':
-        args.addAll(['-threads', '0', '-preset', 'ultrafast']);
+        args.addAll(['-threads', '0']);
         break;
       case 'size':
-        args.addAll(['-preset', 'veryslow']);
+        // Add options that help reduce file size
+        args.addAll(['-an']); // Remove audio
         break;
       case 'quality':
-        args.addAll(['-preset', 'slow']);
+        // Quality-focused options
+        args.addAll(['-an']);
         break;
       default: // balanced
-        args.addAll(['-preset', 'medium']);
+        args.addAll(['-an']);
     }
 
-    // Loop count handling - FFmpeg uses different syntax
+    // FIXED: Loop count handling - FFmpeg uses 0 for infinite, -1 for no loop
     if (loopCount == -1) {
-      // Infinite loop (default for GIF)
+      // Infinite loop
       args.addAll(['-loop', '0']);
     } else if (loopCount == 0) {
       // No loop - play once
-      args.addAll(['-loop', '1']);
+      args.addAll(['-loop', '-1']);
     } else {
-      // Specific number of loops
-      args.addAll(['-loop', (loopCount + 1).toString()]);
+      // Specific number of loops (FFmpeg counts differently)
+      args.addAll(['-loop', loopCount.toString()]);
     }
 
     args.add(outputGif.path);
     return args;
+  }
+
+  // Helper method to parse FFmpeg progress
+  Map<String, dynamic> _parseProgress(String line) {
+    final progress = <String, dynamic>{};
+
+    if (line.contains('frame=')) {
+      // Parse frame, fps, time, etc.
+      final frameMatch = RegExp(r'frame=\s*(\d+)').firstMatch(line);
+      final fpsMatch = RegExp(r'fps=\s*([\d.]+)').firstMatch(line);
+      final timeMatch = RegExp(
+        r'time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})',
+      ).firstMatch(line);
+      final sizeMatch = RegExp(r'size=\s*(\d+)kB').firstMatch(line);
+      final bitrateMatch = RegExp(
+        r'bitrate=\s*([\d.]+)kbits/s',
+      ).firstMatch(line);
+
+      if (frameMatch != null) {
+        progress['frame'] = int.parse(frameMatch.group(1)!);
+      }
+      if (fpsMatch != null) {
+        progress['current_fps'] = double.parse(fpsMatch.group(1)!);
+      }
+      if (timeMatch != null) {
+        final hours = int.parse(timeMatch.group(1)!);
+        final minutes = int.parse(timeMatch.group(2)!);
+        final seconds = int.parse(timeMatch.group(3)!);
+        final centiseconds = int.parse(timeMatch.group(4)!);
+        progress['time_seconds'] =
+            hours * 3600 + minutes * 60 + seconds + centiseconds / 100.0;
+      }
+      if (sizeMatch != null) {
+        progress['size_kb'] = int.parse(sizeMatch.group(1)!);
+      }
+      if (bitrateMatch != null) {
+        progress['bitrate'] = double.parse(bitrateMatch.group(1)!);
+      }
+    }
+
+    return progress;
+  }
+
+  String _formatProgress(Map<String, dynamic> progress, double totalDuration) {
+    final buffer = StringBuffer();
+
+    if (progress['frame'] != null) {
+      buffer.write('Frame: ${progress['frame']}');
+    }
+
+    if (progress['current_fps'] != null) {
+      buffer.write(' | FPS: ${progress['current_fps']?.toStringAsFixed(1)}');
+    }
+
+    if (progress['time_seconds'] != null) {
+      final current = progress['time_seconds'] as double;
+      final percentage = ((current / totalDuration) * 100).clamp(0, 100);
+      buffer.write(
+        ' | ${current.toStringAsFixed(1)}s/${totalDuration.toStringAsFixed(1)}s (${percentage.toStringAsFixed(1)}%)',
+      );
+    }
+
+    if (progress['size_kb'] != null) {
+      final sizeMB = (progress['size_kb'] as int) / 1024.0;
+      buffer.write(' | Size: ${sizeMB.toStringAsFixed(2)}MB');
+    }
+
+    return buffer.toString();
   }
 
   @override
@@ -5112,28 +5500,80 @@ class VideoToGifTool extends Tool {
       // Build FFmpeg arguments
       final args = _buildFFmpegArgs(videoFile, outputGif);
 
+      // Get components for debugging
+
+      final fps = videoSettings['fps'] as int;
+      final maxColors = qualitySettings['max_colors'] as int;
+      final optimization = qualitySettings['optimization'] as String;
+      final dithering = qualitySettings['dithering'] as bool;
+
+      // Build debug info
+      List<String> videoFilters = ['fps=$fps'];
+      if (width == -1) {
+        videoFilters.add('scale=iw:ih:flags=lanczos');
+      } else {
+        videoFilters.add('scale=$width:-1:flags=lanczos');
+      }
+      final videoFilterChain = videoFilters.join(',');
+
+      String paletteGenParams = 'max_colors=$maxColors';
+      String paletteUseParams = dithering
+          ? (optimization == 'quality'
+                ? 'dither=floyd_steinberg'
+                : 'dither=bayer')
+          : 'dither=none';
+
+      yield '**FFmpeg Command:**\n';
       yield '```bash\n';
       yield 'ffmpeg ${args.join(' ')}\n';
       yield '```\n\n';
+      yield '**Filter breakdown:**\n';
+      yield '- Video processing: `$videoFilterChain`\n';
+      yield '- Palette generation: `palettegen=$paletteGenParams`\n';
+      yield '- Palette usage: `paletteuse=$paletteUseParams`\n';
+
+      // Get total duration for progress calculation
+      final totalDuration = (videoSettings['duration'] is int)
+          ? (videoSettings['duration'] as int).toDouble()
+          : videoSettings['duration'] as double;
+
+      yield '### Progress:\n';
 
       // Execute FFmpeg with streaming output
       bool hasError = false;
+      String lastProgressLine = '';
+
       await for (final line in FfmpegService.instance.runStream(args)) {
         if (line.contains('[FFmpeg error:') ||
             line.contains('[FFmpeg exception:')) {
           hasError = true;
-          yield '❌ $line\n';
+          yield '❌ **Error**: $line\n';
         } else if (line.contains('[FFmpeg finished successfully]')) {
-          yield '✅ $line\n';
+          yield '\n✅ **Conversion completed successfully!**\n';
         } else if (line.contains('[Cancelled]')) {
-          yield '⚠️ $line\n';
+          yield '\n⚠️ **Conversion cancelled**\n';
           return;
-        } else {
-          // Show progress or relevant info
-          if (line.contains('frame=') ||
-              line.contains('fps=') ||
-              line.contains('time=')) {
-            yield '`$line`\n';
+        } else if (line.contains('frame=') && line.contains('time=')) {
+          // Parse and format progress
+          final progress = _parseProgress(line);
+          if (progress.isNotEmpty) {
+            final progressText = _formatProgress(progress, totalDuration);
+
+            // Only yield if progress changed significantly
+            if (progressText != lastProgressLine) {
+              yield '📊 $progressText\n';
+              lastProgressLine = progressText;
+
+              // Calculate and update numeric progress for base tool
+              if (progress['time_seconds'] != null) {
+                final percentage =
+                    (((progress['time_seconds'] as double) / totalDuration) *
+                            100)
+                        .clamp(0, 100);
+                // You can add this line if you add progress support to base tool:
+                // updateProgress(percentage.toInt());
+              }
+            }
           }
         }
       }
@@ -5145,21 +5585,21 @@ class VideoToGifTool extends Tool {
         final fileSizeMB = (fileSize / (1024 * 1024)).toStringAsFixed(2);
 
         yield '## ✅ GIF Generated Successfully!\n\n';
-        yield '**File Size**: ${fileSizeMB} MB  \n';
+        yield '**File Size**: $fileSizeMB MB  \n';
         yield '**Location**: `${outputGif.path}`  \n\n';
 
-        // Quality summary
-        yield '### 📊 Quality Summary:\n';
+        // Quality summary with actual values used
+        yield '### 📊 Conversion Summary:\n';
         yield '- **Colors Used**: Up to ${qualitySettings['max_colors']} colors\n';
         yield '- **Palette Mode**: ${qualitySettings['palette_mode']}\n';
-        yield '- **Dithering**: ${qualitySettings['dithering'] ? 'Applied for smoother gradients' : 'Disabled for sharper edges'}\n';
+        yield '- **Dithering**: ${qualitySettings['dithering'] ? _getDitheringMethod(qualitySettings['optimization']) : 'Disabled'}\n';
         yield '- **Optimization**: ${qualitySettings['optimization']} priority\n';
-        yield '- **Frame Rate**: ${videoSettings['fps']} FPS\n';
+        yield '- **Frame Rate**: ${videoSettings['fps']} FPS (applied)\n';
 
         if (width == -1) {
           yield '- **Dimensions**: Original video size preserved\n';
         } else {
-          yield '- **Dimensions**: Scaled to ${width}px wide\n';
+          yield '- **Dimensions**: Scaled to ${width}px wide (applied)\n';
         }
         yield '\n';
 
@@ -5177,26 +5617,85 @@ class VideoToGifTool extends Tool {
           }
         }
 
-        yield '💡 **Tips**:\n';
-        yield '- The GIF is saved in the app\'s temp directory and will be automatically cleaned up after 24 hours\n';
-        yield '- For smaller file sizes, try reducing max colors, FPS, or use "size" optimization\n';
-        yield '- For better quality, increase max colors, use "quality" optimization, or enable dithering\n';
-        yield '- Use "Auto" width to keep original video dimensions\n';
-        yield '- Lower FPS (10-15) works well for most content and reduces file size significantly\n';
+        // Provide optimization tips based on results
+        yield _generateOptimizationTips(
+          fileSize,
+          qualitySettings,
+          videoSettings,
+        );
       } else {
         yield '❌ **Failed**: No output file generated or conversion failed.\n\n';
 
         // Provide troubleshooting tips
         yield '### 🔧 Troubleshooting:\n';
-        yield '- Try reducing the max colors setting (values above 256 may cause issues)\n';
-        yield '- Ensure the video file is not corrupted and in a supported format\n';
-        yield '- Try a shorter duration for the GIF\n';
-        yield '- Check that FFmpeg is properly installed and accessible\n';
-        yield '- Try using "balanced" or "speed" optimization if "quality" fails\n\n';
+        yield '- **Max Colors**: Try values between 64-256 (current: ${qualitySettings['max_colors']})\n';
+        yield '- **Video Format**: Ensure input is MP4, MOV, AVI, or other common format\n';
+        yield '- **Duration**: Try shorter segments (2-10 seconds work best)\n';
+        yield '- **Resolution**: Very high resolutions may cause issues\n';
+        yield '- **FFmpeg**: Ensure FFmpeg is properly installed and accessible\n';
+        yield '- **Settings**: Try "balanced" optimization if others fail\n\n';
       }
     } catch (e) {
       yield '❌ **Error**: $e\n\n';
     }
+  }
+
+  String _getDitheringMethod(String optimization) {
+    switch (optimization) {
+      case 'quality':
+        return 'Floyd-Steinberg (highest quality)';
+      case 'size':
+        return 'Bayer Scale 1 (smallest files)';
+      case 'speed':
+        return 'Bayer Scale 2 (fastest)';
+      default:
+        return 'Bayer Scale 3 (balanced)';
+    }
+  }
+
+  String _generateOptimizationTips(
+    int fileSize,
+    Map<String, dynamic> qualitySettings,
+    Map<String, dynamic> videoSettings,
+  ) {
+    final buffer = StringBuffer();
+    final fileSizeMB = fileSize / (1024 * 1024);
+
+    buffer.write('💡 **Optimization Tips**:\n');
+
+    if (fileSizeMB > 10) {
+      buffer.write(
+        '- **Large file size** (${fileSizeMB.toStringAsFixed(1)}MB): Try reducing colors to 128, FPS to 10, or width to 480px\n',
+      );
+    } else if (fileSizeMB < 0.5) {
+      buffer.write(
+        '- **Small file size** (${fileSizeMB.toStringAsFixed(1)}MB): You can increase quality with more colors or higher FPS\n',
+      );
+    }
+
+    if ((qualitySettings['max_colors'] as int) > 200) {
+      buffer.write(
+        '- **High color count**: Reducing to 128-180 colors often maintains quality while reducing size\n',
+      );
+    }
+
+    if ((videoSettings['fps'] as int) > 15) {
+      buffer.write(
+        '- **High FPS**: 10-12 FPS is usually sufficient and reduces file size significantly\n',
+      );
+    }
+
+    buffer.write(
+      '- Files are auto-cleaned after 24 hours from temp directory\n',
+    );
+    buffer.write(
+      '- For web use, keep files under 5MB for best compatibility\n',
+    );
+    buffer.write(
+      '- Use "size" optimization for social media, "quality" for presentations\n',
+    );
+
+    return buffer.toString();
   }
 
   @override
