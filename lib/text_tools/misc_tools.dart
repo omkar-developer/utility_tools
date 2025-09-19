@@ -3934,6 +3934,8 @@ class VideoToGifTool extends Tool {
         allowEmptyInput: true, // No text input needed - use file picker
         isOutputMarkdown: true,
         supportsStreaming: true,
+        supportsLiveUpdate: false,
+        showsProgress: true,
         settings: {
           'video_settings': {
             'file_path': '',
@@ -4502,7 +4504,7 @@ class VideoToGifTool extends Tool {
                               Row(
                                 children: [
                                   Icon(
-                                    selectedVideoPath!.startsWith('http')
+                                    selectedVideoPath.startsWith('http')
                                         ? Icons.link
                                         : Icons.check_circle,
                                     color: theme.colorScheme.primary,
@@ -4511,9 +4513,9 @@ class VideoToGifTool extends Tool {
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
-                                      selectedVideoPath!.startsWith('http')
-                                          ? 'URL: ${Uri.parse(selectedVideoPath!).host}'
-                                          : path.basename(selectedVideoPath!),
+                                      selectedVideoPath.startsWith('http')
+                                          ? 'URL: ${Uri.parse(selectedVideoPath).host}'
+                                          : path.basename(selectedVideoPath),
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(
                                             color: theme
@@ -4527,7 +4529,7 @@ class VideoToGifTool extends Tool {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                selectedVideoPath!.startsWith('http')
+                                selectedVideoPath.startsWith('http')
                                     ? 'Duration: Estimated (actual may vary)'
                                     : 'Duration: ${videoDuration.toStringAsFixed(1)}s',
                                 style: theme.textTheme.bodySmall?.copyWith(
@@ -5455,7 +5457,7 @@ class VideoToGifTool extends Tool {
         return;
       }
 
-      final videoFile = File(selectedVideoPath!);
+      final videoFile = File(selectedVideoPath);
       if (!await videoFile.exists()) {
         yield '❌ **Error**: Selected video file not found: `${videoFile.path}`\n\n';
         return;
@@ -5566,12 +5568,11 @@ class VideoToGifTool extends Tool {
 
               // Calculate and update numeric progress for base tool
               if (progress['time_seconds'] != null) {
-                final percentage =
+                executionProgress =
                     (((progress['time_seconds'] as double) / totalDuration) *
                             100)
-                        .clamp(0, 100);
-                // You can add this line if you add progress support to base tool:
-                // updateProgress(percentage.toInt());
+                        .clamp(0, 100)
+                        .toInt();
               }
             }
           }
@@ -5714,6 +5715,2135 @@ class VideoToGifTool extends Tool {
   }
 }
 
+class VideoProcessorTool extends Tool {
+  VideoProcessorTool()
+    : super(
+        name: '🎬 Advanced Video Processor',
+        description:
+            'Comprehensive video processing: convert formats, trim, compress, extract audio, and more - now with multiple operations support',
+        icon: Icons.video_settings,
+        allowEmptyInput: true,
+        isOutputMarkdown: true,
+        supportsStreaming: true,
+        supportsLiveUpdate: false,
+        showsProgress: true,
+        settings: {
+          'input_settings': {'file_path': '', 'video_duration': 0.0},
+          'operation_settings': {
+            'operations': <String>[], // Multiple operations support
+            'output_format': 'mp4',
+            'audio_output_format': 'mp3',
+            'start_time': 0.0,
+            'end_time': 0.0,
+            'duration': 0.0,
+          },
+          'video_settings': {
+            'codec': 'libx264',
+            'resolution': 'original',
+            'custom_width': -1,
+            'custom_height': -1,
+            'frame_rate': 'original',
+            'custom_fps': 30,
+            'quality': 'medium',
+            'bitrate_mode': 'auto',
+            'custom_bitrate': 2000,
+          },
+          'audio_settings': {
+            'audio_codec': 'aac',
+            'audio_bitrate': 128,
+            'sample_rate': 44100,
+            'channels': 'stereo',
+            'audio_action': 'keep',
+          },
+          'advanced_settings': {
+            'rotation': 0, // 0, 90, 180, 270, -90, -180, -270
+            'flip_horizontal': false,
+            'flip_vertical': false,
+            'denoise': false,
+            'stabilize': false,
+            'speed_factor': 1.0,
+            'fade_in': 0.0,
+            'fade_out': 0.0,
+          },
+          'output_settings': {
+            'filename_prefix': '',
+            'preview_enabled': true,
+            'optimization_preset': 'balanced',
+          },
+        },
+        settingsHints: {
+          'input_settings': {
+            'type': 'custom',
+            'label': 'Input Settings',
+            'help': 'Video file selection and trimming controls',
+            'show_label': false,
+            'builder': _buildInputSettingsControl,
+          },
+          'operation_settings': {
+            'type': 'custom',
+            'label': 'Operation Settings',
+            'help': 'Choose multiple operations to perform in sequence',
+            'show_label': false,
+            'builder': _buildOperationSettingsControl,
+          },
+          'video_settings': {
+            'type': 'custom',
+            'label': 'Video Settings',
+            'help': 'Video encoding and quality parameters',
+            'show_label': false,
+            'builder': _buildVideoSettingsControl,
+          },
+          'audio_settings': {
+            'type': 'custom',
+            'label': 'Audio Settings',
+            'help': 'Audio processing options',
+            'show_label': false,
+            'builder': _buildAudioSettingsControl,
+          },
+          'advanced_settings': {
+            'type': 'custom',
+            'label': 'Advanced Effects',
+            'help': 'Additional video effects and transformations',
+            'show_label': false,
+            'builder': _buildAdvancedSettingsControl,
+          },
+          'output_settings': {
+            'type': 'custom',
+            'label': 'Output Settings',
+            'help': 'Output file and processing options',
+            'show_label': false,
+            'builder': _buildOutputSettingsControl,
+          },
+        },
+      );
+
+  static Future<void> initializeAndCleanup() async {
+    if (kIsWeb) return;
+
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final tempDir = Directory(
+        path.join(appDocDir.path, 'utility_tools', 'temp'),
+      );
+
+      if (!await tempDir.exists()) {
+        await tempDir.create(recursive: true);
+      }
+
+      await _cleanupOldTempFiles();
+    } catch (e) {
+      print('Failed to initialize temp directory: $e');
+    }
+  }
+
+  static Future<void> _cleanupOldTempFiles() async {
+    if (kIsWeb) return;
+    final tempDir = Directory(
+      path.join(
+        (await getApplicationDocumentsDirectory()).path,
+        'utility_tools',
+        'temp',
+      ),
+    );
+    if (!await tempDir.exists()) return;
+
+    try {
+      final now = DateTime.now();
+      await for (final entity in tempDir.list()) {
+        if (entity is File) {
+          final stat = await entity.stat();
+          final age = now.difference(stat.modified);
+
+          if (age.inHours > 24) {
+            try {
+              await entity.delete();
+            } catch (e) {
+              // Ignore deletion errors
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error during temp cleanup: $e');
+    }
+  }
+
+  static Future<double> _getVideoDuration(String videoPath) async {
+    try {
+      final result = await Process.run(
+        AppSettings.ffmpegPath.replaceAll('ffmpeg', 'ffprobe'),
+        [
+          '-v',
+          'quiet',
+          '-show_entries',
+          'format=duration',
+          '-of',
+          'csv=p=0',
+          videoPath,
+        ],
+      );
+
+      if (result.exitCode == 0) {
+        final durationStr = result.stdout.toString().trim();
+        return double.tryParse(durationStr) ?? 0.0;
+      }
+    } catch (e) {
+      try {
+        final result = await Process.run(AppSettings.ffmpegPath, [
+          '-i',
+          videoPath,
+        ], runInShell: true);
+
+        final stderr = result.stderr.toString();
+        final durationMatch = RegExp(
+          r'Duration: (\d+):(\d+):(\d+\.\d+)',
+        ).firstMatch(stderr);
+        if (durationMatch != null) {
+          final hours = int.parse(durationMatch.group(1)!);
+          final minutes = int.parse(durationMatch.group(2)!);
+          final seconds = double.parse(durationMatch.group(3)!);
+          return hours * 3600 + minutes * 60 + seconds;
+        }
+      } catch (e2) {
+        // Fallback
+      }
+    }
+    return 0.0;
+  }
+
+  static Widget _buildInputSettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final inputSettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+    final selectedVideoPath = inputSettings['file_path'] as String?;
+    final videoDuration = (inputSettings['video_duration'] as double?) ?? 0.0;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        bool isDragging = false;
+
+        Future<void> processVideoFile(String filePath) async {
+          try {
+            final file = File(filePath);
+            if (!await file.exists()) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('File not found: ${path.basename(filePath)}'),
+                    backgroundColor: theme.colorScheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+
+            final duration = await _getVideoDuration(filePath);
+            final updatedSettings = Map<String, dynamic>.from(inputSettings);
+            updatedSettings['file_path'] = filePath;
+            updatedSettings['video_duration'] = duration;
+
+            setState(() {});
+            onChanged(key, updatedSettings);
+
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Video loaded: ${path.basename(filePath)}'),
+                  backgroundColor: theme.colorScheme.primary,
+                ),
+              );
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error loading video: $e'),
+                  backgroundColor: theme.colorScheme.error,
+                ),
+              );
+            }
+          }
+        }
+
+        Future<void> handlePaste() async {
+          try {
+            final clipboardFiles = await Pasteboard.files();
+
+            if (clipboardFiles.isNotEmpty) {
+              for (final filePath in clipboardFiles) {
+                if (_isVideoFile(filePath)) {
+                  await processVideoFile(filePath);
+                  return;
+                }
+              }
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Found ${clipboardFiles.length} files, but no video files',
+                    ),
+                    backgroundColor: theme.colorScheme.error,
+                  ),
+                );
+              }
+              return;
+            }
+
+            final clipboardData = await Pasteboard.text;
+            if (clipboardData == null || clipboardData.isEmpty) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Clipboard is empty')),
+                );
+              }
+              return;
+            }
+
+            String processedPath = clipboardData.trim();
+            if (processedPath.startsWith('file:///')) {
+              processedPath = processedPath.substring(8);
+            } else if (processedPath.startsWith('file://')) {
+              processedPath = processedPath.substring(7);
+            }
+
+            if (processedPath.startsWith('http://') ||
+                processedPath.startsWith('https://')) {
+              final updatedSettings = Map<String, dynamic>.from(inputSettings);
+              updatedSettings['file_path'] = processedPath;
+              updatedSettings['video_duration'] = 120.0; // Default for URLs
+
+              setState(() {});
+              onChanged(key, updatedSettings);
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'URL loaded (duration estimation may be inaccurate)',
+                    ),
+                    backgroundColor: theme.colorScheme.tertiary,
+                  ),
+                );
+              }
+              return;
+            }
+
+            if (processedPath.isNotEmpty && _isVideoFile(processedPath)) {
+              await processVideoFile(processedPath);
+            } else {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Clipboard doesn\'t contain a valid video file path or URL',
+                    ),
+                  ),
+                );
+              }
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error pasting: $e'),
+                  backgroundColor: theme.colorScheme.error,
+                ),
+              );
+            }
+          }
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outline.withAlpha(130)),
+            borderRadius: BorderRadius.circular(12),
+            color: theme.colorScheme.surface,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.video_file, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Input Video',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              DropTarget(
+                onDragDone: (details) async {
+                  if (details.files.isNotEmpty) {
+                    final file = details.files.first;
+                    await processVideoFile(file.path);
+                  }
+                  setState(() => isDragging = false);
+                },
+                onDragEntered: (details) {
+                  setState(() => isDragging = true);
+                },
+                onDragExited: (details) {
+                  setState(() => isDragging = false);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDragging
+                        ? theme.colorScheme.primaryContainer.withAlpha(120)
+                        : theme.colorScheme.surfaceContainerHighest.withAlpha(
+                            80,
+                          ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDragging
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outline.withAlpha(80),
+                      width: isDragging ? 2 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: kIsWeb
+                                ? null
+                                : () async {
+                                    try {
+                                      FilePickerResult? result =
+                                          await FilePicker.platform.pickFiles(
+                                            type: FileType.video,
+                                            allowMultiple: false,
+                                          );
+
+                                      if (result != null &&
+                                          result.files.single.path != null) {
+                                        await processVideoFile(
+                                          result.files.single.path!,
+                                        );
+                                      }
+                                    } catch (e) {
+                                      print('Error picking file: $e');
+                                    }
+                                  },
+                            icon: const Icon(Icons.video_file, size: 20),
+                            label: Text(
+                              selectedVideoPath == null
+                                  ? 'Choose Video'
+                                  : 'Change Video',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: selectedVideoPath == null
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.secondary,
+                              foregroundColor: theme.colorScheme.onPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: handlePaste,
+                            icon: const Icon(Icons.content_paste, size: 18),
+                            label: const Text('Paste'),
+                          ),
+                        ],
+                      ),
+
+                      if (!kIsWeb) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isDragging
+                                ? theme.colorScheme.primary.withAlpha(40)
+                                : theme.colorScheme.surfaceContainerHighest
+                                      .withAlpha(60),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: theme.colorScheme.outline.withAlpha(60),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isDragging
+                                    ? Icons.file_download
+                                    : Icons.drag_indicator,
+                                size: 16,
+                                color: isDragging
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface.withAlpha(
+                                        150,
+                                      ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  isDragging
+                                      ? 'Drop video file here...'
+                                      : 'Or drag & drop a video file here',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: isDragging
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurface.withAlpha(
+                                            150,
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      if (selectedVideoPath != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer.withAlpha(
+                              120,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withAlpha(80),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    selectedVideoPath.startsWith('http')
+                                        ? Icons.link
+                                        : Icons.check_circle,
+                                    color: theme.colorScheme.primary,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      selectedVideoPath.startsWith('http')
+                                          ? 'URL: ${Uri.parse(selectedVideoPath).host}'
+                                          : path.basename(selectedVideoPath),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onPrimaryContainer,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (videoDuration > 0) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Duration: ${_formatDuration(videoDuration)}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onPrimaryContainer
+                                        .withAlpha(200),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              if (selectedVideoPath != null && videoDuration > 0) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.secondaryContainer.withAlpha(100),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.secondary.withAlpha(80),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.content_cut,
+                            color: theme.colorScheme.secondary,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Trim Controls (Optional)',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: theme.colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      Text(
+                        'Start Time: ${_formatDuration(inputSettings['start_time'] ?? 0.0)}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      Slider(
+                        value: (inputSettings['start_time'] ?? 0.0) as double,
+                        min: 0.0,
+                        max: videoDuration,
+                        divisions: (videoDuration * 10).round(),
+                        onChanged: (value) {
+                          final updatedSettings = Map<String, dynamic>.from(
+                            inputSettings,
+                          );
+                          updatedSettings['start_time'] = value;
+                          // Ensure end_time is after start_time
+                          if ((updatedSettings['end_time'] ?? videoDuration) <=
+                              value) {
+                            updatedSettings['end_time'] = value + 1.0;
+                          }
+                          setState(() {});
+                          onChanged(key, updatedSettings);
+                        },
+                      ),
+
+                      Text(
+                        'End Time: ${_formatDuration(inputSettings['end_time'] ?? videoDuration)}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      Slider(
+                        value:
+                            (inputSettings['end_time'] ?? videoDuration)
+                                as double,
+                        min: (inputSettings['start_time'] ?? 0.0) + 0.1,
+                        max: videoDuration,
+                        divisions: (videoDuration * 10).round(),
+                        onChanged: (value) {
+                          final updatedSettings = Map<String, dynamic>.from(
+                            inputSettings,
+                          );
+                          updatedSettings['end_time'] = value;
+                          updatedSettings['duration'] =
+                              value - (updatedSettings['start_time'] ?? 0.0);
+                          setState(() {});
+                          onChanged(key, updatedSettings);
+                        },
+                      ),
+
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Selected Duration: ${_formatDuration((inputSettings['end_time'] ?? videoDuration) - (inputSettings['start_time'] ?? 0.0))}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          TextButton.icon(
+                            onPressed: () {
+                              final updatedSettings = Map<String, dynamic>.from(
+                                inputSettings,
+                              );
+                              updatedSettings['start_time'] = 0.0;
+                              updatedSettings['end_time'] = videoDuration;
+                              updatedSettings['duration'] = videoDuration;
+                              setState(() {});
+                              onChanged(key, updatedSettings);
+                            },
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('Reset'),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Full Duration: ${_formatDuration(videoDuration)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withAlpha(150),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static Widget _buildOperationSettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final operationSettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        List<String> selectedOperations = List<String>.from(
+          operationSettings['operations'] as List? ?? [],
+        );
+        String currentFormat =
+            operationSettings['output_format'] as String? ?? 'mp4';
+        String audioOutputFormat =
+            operationSettings['audio_output_format'] as String? ?? 'mp3';
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outline.withAlpha(130)),
+            borderRadius: BorderRadius.circular(12),
+            color: theme.colorScheme.surface,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.settings_applications,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Operations (${selectedOperations.length})',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              Text(
+                'Select operations to perform (in order):',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Multiple operation selection
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildMultiOperationChip(
+                    context,
+                    'trim',
+                    'Trim/Cut',
+                    Icons.content_cut,
+                    selectedOperations,
+                    (operations) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        operationSettings,
+                      );
+                      updatedSettings['operations'] = operations;
+                      setState(() {
+                        selectedOperations = operations;
+                      });
+                      onChanged(key, updatedSettings);
+                    },
+                  ),
+                  _buildMultiOperationChip(
+                    context,
+                    'rotate',
+                    'Rotate/Flip',
+                    Icons.rotate_right,
+                    selectedOperations,
+                    (operations) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        operationSettings,
+                      );
+                      updatedSettings['operations'] = operations;
+                      setState(() {
+                        selectedOperations = operations;
+                      });
+                      onChanged(key, updatedSettings);
+                    },
+                  ),
+                  _buildMultiOperationChip(
+                    context,
+                    'enhance',
+                    'Enhance',
+                    Icons.auto_fix_high,
+                    selectedOperations,
+                    (operations) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        operationSettings,
+                      );
+                      updatedSettings['operations'] = operations;
+                      setState(() {
+                        selectedOperations = operations;
+                      });
+                      onChanged(key, updatedSettings);
+                    },
+                  ),
+                  _buildMultiOperationChip(
+                    context,
+                    'compress',
+                    'Compress',
+                    Icons.compress,
+                    selectedOperations,
+                    (operations) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        operationSettings,
+                      );
+                      updatedSettings['operations'] = operations;
+                      setState(() {
+                        selectedOperations = operations;
+                      });
+                      onChanged(key, updatedSettings);
+                    },
+                  ),
+                  _buildMultiOperationChip(
+                    context,
+                    'convert',
+                    'Convert',
+                    Icons.transform,
+                    selectedOperations,
+                    (operations) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        operationSettings,
+                      );
+                      updatedSettings['operations'] = operations;
+                      setState(() {
+                        selectedOperations = operations;
+                      });
+                      onChanged(key, updatedSettings);
+                    },
+                  ),
+                  _buildMultiOperationChip(
+                    context,
+                    'extract_audio',
+                    'Extract Audio',
+                    Icons.audiotrack,
+                    selectedOperations,
+                    (operations) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        operationSettings,
+                      );
+                      updatedSettings['operations'] = operations;
+                      setState(() {
+                        selectedOperations = operations;
+                      });
+                      onChanged(key, updatedSettings);
+                    },
+                  ),
+                ],
+              ),
+
+              // Show operation order
+              if (selectedOperations.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withAlpha(100),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Processing Order:',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ...selectedOperations.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final operation = entry.value;
+                        return Text(
+                          '${index + 1}. ${_getOperationDisplayName(operation)}',
+                          style: theme.textTheme.bodySmall,
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Output format selection
+              if (selectedOperations.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  selectedOperations.contains('extract_audio')
+                      ? 'Audio Format'
+                      : 'Output Format',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                DropdownButton<String>(
+                  value: currentFormat,
+                  isExpanded: true,
+                  items: [
+                    DropdownMenuItem(
+                      value: 'mp4',
+                      child: Text('MP4 (H.264) - Most Compatible'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'mkv',
+                      child: Text('MKV (Matroska) - High Quality'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'avi',
+                      child: Text('AVI - Legacy Compatibility'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'mov',
+                      child: Text('MOV (QuickTime) - Apple'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'webm',
+                      child: Text('WebM - Web Optimized'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        operationSettings,
+                      );
+                      updatedSettings['output_format'] = value;
+                      currentFormat = value;
+                      setState(() {});
+                      onChanged(key, updatedSettings);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                DropdownButton<String>(
+                  value: audioOutputFormat,
+                  isExpanded: true,
+                  items: [
+                    DropdownMenuItem(
+                      value: 'mp3',
+                      child: Text('MP3 - Most Compatible'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'aac',
+                      child: Text('AAC - High Quality'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'wav',
+                      child: Text('WAV - Lossless'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'flac',
+                      child: Text('FLAC - Lossless Compressed'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'ogg',
+                      child: Text('OGG - Open Source'),
+                    ),
+                  ],
+
+                  onChanged: (value) {
+                    if (value != null) {
+                      final updatedSettings = Map<String, dynamic>.from(
+                        operationSettings,
+                      );
+                      updatedSettings['audio_output_format'] = value;
+                      audioOutputFormat = value;
+                      setState(() {});
+                      onChanged(key, updatedSettings);
+                    }
+                  },
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static bool _isVideoFile(String filePath) {
+    final extension = path.extension(filePath).toLowerCase();
+    return [
+      '.mp4',
+      '.mov',
+      '.avi',
+      '.mkv',
+      '.webm',
+      '.m4v',
+      '.flv',
+      '.wmv',
+      '.mpg',
+      '.mpeg',
+    ].contains(extension);
+  }
+
+  static Widget _buildMultiOperationChip(
+    BuildContext context,
+    String value,
+    String label,
+    IconData icon,
+    List<String> selectedOperations,
+    Function(List<String>) onSelectionChanged,
+  ) {
+    final theme = Theme.of(context);
+    final isSelected = selectedOperations.contains(value);
+
+    return FilterChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 4),
+          Text(label),
+          if (isSelected) ...[
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '${selectedOperations.indexOf(value) + 1}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onPrimary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        final newOperations = List<String>.from(selectedOperations);
+        if (selected) {
+          newOperations.add(value);
+        } else {
+          newOperations.remove(value);
+        }
+        onSelectionChanged(newOperations);
+      },
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+      selectedColor: theme.colorScheme.primaryContainer,
+      checkmarkColor: theme.colorScheme.primary,
+    );
+  }
+
+  static String _formatDuration(double seconds) {
+    final duration = Duration(seconds: seconds.round());
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    if (duration.inHours > 0) {
+      return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
+    }
+    return "$twoDigitMinutes:$twoDigitSeconds";
+  }
+
+  static Widget _buildRotationChip(
+    BuildContext context,
+    int rotation,
+    String label,
+    Map<String, dynamic> advancedSettings,
+    Function onChanged,
+    String key,
+  ) {
+    final theme = Theme.of(context);
+    final isSelected = (advancedSettings['rotation'] as int) == rotation;
+
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) {
+          final updatedSettings = Map<String, dynamic>.from(advancedSettings);
+          updatedSettings['rotation'] = rotation;
+          onChanged(key, updatedSettings);
+        }
+      },
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+      selectedColor: theme.colorScheme.primaryContainer,
+      checkmarkColor: theme.colorScheme.primary,
+    );
+  }
+
+  Future<File> _generateUniqueOutputFile(
+    String prefix,
+    String extension,
+  ) async {
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final tempDir = Directory(
+      path.join(appDocDir.path, 'utility_tools', 'temp'),
+    );
+
+    if (!await tempDir.exists()) {
+      await tempDir.create(recursive: true);
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final filename = '${prefix}_$timestamp.$extension';
+    return File(path.join(tempDir.path, filename));
+  }
+
+  List<String> _buildFFmpegArgs(
+    File inputFile,
+    File outputFile,
+    File? audioFile,
+  ) {
+    final operationSettings =
+        settings['operation_settings'] as Map<String, dynamic>;
+    final videoSettings = settings['video_settings'] as Map<String, dynamic>;
+    final audioSettings = settings['audio_settings'] as Map<String, dynamic>;
+    final advancedSettings =
+        settings['advanced_settings'] as Map<String, dynamic>;
+    final inputSettings = settings['input_settings'] as Map<String, dynamic>;
+
+    final operations = List<String>.from(
+      operationSettings['operations'] as List? ?? [],
+    );
+    final outputFormat = operationSettings['output_format'] as String;
+    final audioOutputFormat =
+        operationSettings['audio_output_format'] as String;
+
+    final wantsAudioExtract = operations.contains('extract_audio');
+    final wantsVideoProcess = operations.any((op) => op != 'extract_audio');
+
+    final args = <String>['-y'];
+
+    // --- TRIM (before input, applies to all outputs) ---
+    final startTime = inputSettings['start_time'] as double? ?? 0.0;
+    final endTime = inputSettings['end_time'] as double?;
+    final videoDuration = inputSettings['video_duration'] as double? ?? 0.0;
+
+    if (startTime > 0) {
+      args.addAll(['-ss', startTime.toString()]);
+    }
+    if (endTime != null && endTime < videoDuration) {
+      final duration = endTime - startTime;
+      args.addAll(['-t', duration.toString()]);
+    }
+
+    // Input
+    args.addAll(['-i', inputFile.path]);
+
+    // --- FILTERS ---
+    final videoFilters = <String>[];
+    final audioFilters = <String>[];
+
+    for (final operation in operations) {
+      switch (operation) {
+        case 'rotate':
+          videoFilters.addAll(_buildRotationFilters(advancedSettings));
+          break;
+        case 'enhance':
+          final enhanceFilters = _buildEnhanceFilters(advancedSettings);
+          videoFilters.addAll(enhanceFilters['video'] as List<String>);
+          audioFilters.addAll(enhanceFilters['audio'] as List<String>);
+          break;
+      }
+    }
+
+    // --- VIDEO OUTPUT ---
+    if (wantsVideoProcess) {
+      if (videoFilters.isNotEmpty) {
+        args.addAll(['-vf', videoFilters.join(',')]);
+      }
+      if (audioFilters.isNotEmpty) {
+        args.addAll(['-af', audioFilters.join(',')]);
+      }
+
+      if (operations.contains('compress')) {
+        args.addAll(
+          _buildCompressArgs(videoSettings, audioSettings, outputFormat),
+        );
+      } else if (operations.contains('convert')) {
+        args.addAll(
+          _buildConvertArgs(videoSettings, audioSettings, outputFormat),
+        );
+      } else if (videoFilters.isEmpty && audioFilters.isEmpty) {
+        args.addAll(['-c', 'copy']); // passthrough if no changes
+      } else {
+        args.addAll(['-c:v', 'libx264', '-c:a', 'aac']);
+      }
+
+      args.addAll(['-map', '0']); // include video + audio
+      args.add(outputFile.path);
+    }
+
+    // --- AUDIO OUTPUT ---
+    if (wantsAudioExtract) {
+      args.addAll(['-map', '0:a']);
+      args.addAll(_buildExtractAudioArgs(audioSettings, audioOutputFormat));
+      args.add(
+        audioFile?.path ?? _buildAudioOutputPath(inputFile, audioOutputFormat),
+      );
+    }
+
+    return args;
+  }
+
+  String _buildAudioOutputPath(File inputFile, String format) {
+    final dir = inputFile.parent.path;
+    final base = inputFile.uri.pathSegments.last.split('.').first;
+    return '$dir/${base}_audio.$format';
+  }
+
+  List<String> _buildRotationFilters(Map<String, dynamic> advancedSettings) {
+    List<String> filters = [];
+
+    final rotation = advancedSettings['rotation'] as int;
+    final flipH = advancedSettings['flip_horizontal'] as bool;
+    final flipV = advancedSettings['flip_vertical'] as bool;
+
+    if (rotation != 0) {
+      switch (rotation) {
+        case 90:
+          filters.add('transpose=1');
+          break;
+        case 180:
+          filters.add('transpose=1,transpose=1');
+          break;
+        case 270:
+          filters.add('transpose=2');
+          break;
+        case -90: // 90° counter-clockwise
+          filters.add('transpose=2');
+          break;
+        case -270: // 270° counter-clockwise
+          filters.add('transpose=1');
+          break;
+      }
+    }
+
+    if (flipH) {
+      filters.add('hflip');
+    }
+
+    if (flipV) {
+      filters.add('vflip');
+    }
+
+    return filters;
+  }
+
+  Map<String, List<String>> _buildEnhanceFilters(
+    Map<String, dynamic> advancedSettings,
+  ) {
+    List<String> videoFilters = [];
+    List<String> audioFilters = [];
+
+    final denoise = advancedSettings['denoise'] as bool;
+    final stabilize = advancedSettings['stabilize'] as bool;
+    final speedFactor = advancedSettings['speed_factor'] as double;
+
+    if (denoise) {
+      videoFilters.add('nlmeans');
+    }
+
+    if (stabilize) {
+      videoFilters.add('vidstabdetect');
+      videoFilters.add('vidstabtransform');
+    }
+
+    if (speedFactor != 1.0) {
+      videoFilters.add('setpts=${(1.0 / speedFactor).toStringAsFixed(2)}*PTS');
+      audioFilters.add('atempo=${speedFactor.toStringAsFixed(2)}');
+    }
+
+    return {'video': videoFilters, 'audio': audioFilters};
+  }
+
+  List<String> _buildConvertArgs(
+    Map<String, dynamic> videoSettings,
+    Map<String, dynamic> audioSettings,
+    String format,
+  ) {
+    List<String> args = [];
+
+    // Video codec
+    final codec = videoSettings['codec'] as String;
+    args.addAll(['-c:v', codec]);
+
+    // Quality settings
+    final quality = videoSettings['quality'] as String;
+    switch (quality) {
+      case 'low':
+        args.addAll(['-crf', '28']);
+        break;
+      case 'medium':
+        args.addAll(['-crf', '23']);
+        break;
+      case 'high':
+        args.addAll(['-crf', '18']);
+        break;
+      case 'lossless':
+        args.addAll(['-crf', '0']);
+        break;
+    }
+
+    // Audio codec
+    final audioCodec = audioSettings['audio_codec'] as String;
+    final audioBitrate = audioSettings['audio_bitrate'] as int;
+    args.addAll(['-c:a', audioCodec, '-b:a', '${audioBitrate}k']);
+
+    return args;
+  }
+
+  List<String> _buildCompressArgs(
+    Map<String, dynamic> videoSettings,
+    Map<String, dynamic> audioSettings,
+    String format,
+  ) {
+    List<String> args = [];
+
+    // More aggressive compression settings
+    args.addAll(['-c:v', 'libx264', '-crf', '28']);
+
+    // Resolution scaling if specified
+    final resolution = videoSettings['resolution'] as String;
+    if (resolution != 'original') {
+      // Instead of adding -vf here, return a filter name
+      // Caller (_buildFFmpegArgs) will merge it into videoFilters
+      switch (resolution) {
+        case '720p':
+          args.addAll(['-s', '1280x720']);
+          break;
+        case '480p':
+          args.addAll(['-s', '854x480']);
+          break;
+        case '360p':
+          args.addAll(['-s', '640x360']);
+          break;
+      }
+    }
+
+    // Lower audio bitrate for compression
+    args.addAll(['-c:a', 'aac', '-b:a', '96k']);
+
+    return args;
+  }
+
+  List<String> _buildExtractAudioArgs(
+    Map<String, dynamic> audioSettings,
+    String format,
+  ) {
+    List<String> args = [];
+
+    final audioBitrate = audioSettings['audio_bitrate'] as int;
+    final sampleRate = audioSettings['sample_rate'] as int;
+
+    switch (format) {
+      case 'mp3':
+        args.addAll(['-c:a', 'libmp3lame', '-b:a', '${audioBitrate}k']);
+        break;
+      case 'aac':
+        args.addAll(['-c:a', 'aac', '-b:a', '${audioBitrate}k']);
+        break;
+      case 'wav':
+        args.addAll(['-c:a', 'pcm_s16le', '-ar', sampleRate.toString()]);
+        break;
+      case 'flac':
+        args.addAll(['-c:a', 'flac']);
+        break;
+      case 'ogg':
+        args.addAll(['-c:a', 'libvorbis', '-b:a', '${audioBitrate}k']);
+        break;
+    }
+
+    return args;
+  }
+
+  static Widget _buildVideoSettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final videoSettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outline.withAlpha(130)),
+            borderRadius: BorderRadius.circular(12),
+            color: theme.colorScheme.surface,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.video_camera_back,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Video Settings',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Codec selection
+              Text(
+                'Video Codec',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButton<String>(
+                value: videoSettings['codec'] as String,
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'libx264',
+                    child: Text('H.264 (libx264) - Most Compatible'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'libx265',
+                    child: Text('H.265 (libx265) - Better Compression'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'libvpx-vp9',
+                    child: Text('VP9 - Open Source, Web'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'copy',
+                    child: Text('Copy - No Re-encoding'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    final updatedSettings = Map<String, dynamic>.from(
+                      videoSettings,
+                    );
+                    updatedSettings['codec'] = value;
+                    onChanged(key, updatedSettings);
+                  }
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              // Quality preset
+              Text(
+                'Quality Preset',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                multiSelectionEnabled: false,
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: 'low', label: Text('Low')),
+                  ButtonSegment(value: 'medium', label: Text('Medium')),
+                  ButtonSegment(value: 'high', label: Text('High')),
+                  ButtonSegment(value: 'lossless', label: Text('Lossless')),
+                ],
+                selected: {videoSettings['quality'] as String},
+                onSelectionChanged: (selection) {
+                  final updatedSettings = Map<String, dynamic>.from(
+                    videoSettings,
+                  );
+                  updatedSettings['quality'] = selection.first;
+                  onChanged(key, updatedSettings);
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              // Resolution
+              Text(
+                'Resolution',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButton<String>(
+                value: videoSettings['resolution'] as String,
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'original',
+                    child: Text('Keep Original'),
+                  ),
+                  DropdownMenuItem(value: '4k', child: Text('4K (3840x2160)')),
+                  DropdownMenuItem(
+                    value: '1080p',
+                    child: Text('1080p (1920x1080)'),
+                  ),
+                  DropdownMenuItem(
+                    value: '720p',
+                    child: Text('720p (1280x720)'),
+                  ),
+                  DropdownMenuItem(
+                    value: '480p',
+                    child: Text('480p (854x480)'),
+                  ),
+                  DropdownMenuItem(
+                    value: '360p',
+                    child: Text('360p (640x360)'),
+                  ),
+                  DropdownMenuItem(value: 'custom', child: Text('Custom')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    final updatedSettings = Map<String, dynamic>.from(
+                      videoSettings,
+                    );
+                    updatedSettings['resolution'] = value;
+                    onChanged(key, updatedSettings);
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static Widget _buildAudioSettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final audioSettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outline.withAlpha(130)),
+        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.surface,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.audiotrack, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Audio Settings',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          Text(
+            'Audio Action',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            multiSelectionEnabled: false,
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: 'keep', label: Text('Keep')),
+              ButtonSegment(value: 'remove', label: Text('Remove')),
+              ButtonSegment(value: 'extract_only', label: Text('Extract Only')),
+            ],
+            selected: {audioSettings['audio_action'] as String},
+            onSelectionChanged: (selection) {
+              final updatedSettings = Map<String, dynamic>.from(audioSettings);
+              updatedSettings['audio_action'] = selection.first;
+              onChanged(key, updatedSettings);
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          Text(
+            'Audio Bitrate: ${audioSettings['audio_bitrate']}k',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Slider(
+            value: (audioSettings['audio_bitrate'] as int).toDouble(),
+            min: 64,
+            max: 320,
+            divisions: 8,
+            onChanged: (value) {
+              final updatedSettings = Map<String, dynamic>.from(audioSettings);
+              updatedSettings['audio_bitrate'] = value.round();
+              onChanged(key, updatedSettings);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildAdvancedSettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final advancedSettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outline.withAlpha(130)),
+        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.surface,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_fix_high, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Advanced Effects',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Enhanced Rotation with anti-clockwise support
+          Text(
+            'Rotation',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildRotationChip(
+                context,
+                0,
+                '0°',
+                advancedSettings,
+                onChanged,
+                key,
+              ),
+              _buildRotationChip(
+                context,
+                90,
+                '90° CW',
+                advancedSettings,
+                onChanged,
+                key,
+              ),
+              _buildRotationChip(
+                context,
+                180,
+                '180°',
+                advancedSettings,
+                onChanged,
+                key,
+              ),
+              _buildRotationChip(
+                context,
+                270,
+                '270° CW',
+                advancedSettings,
+                onChanged,
+                key,
+              ),
+              _buildRotationChip(
+                context,
+                -90,
+                '90° CCW',
+                advancedSettings,
+                onChanged,
+                key,
+              ),
+              _buildRotationChip(
+                context,
+                -270,
+                '270° CCW',
+                advancedSettings,
+                onChanged,
+                key,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Flip controls
+          Row(
+            children: [
+              Expanded(
+                child: SwitchListTile(
+                  title: const Text('Flip Horizontal'),
+                  subtitle: const Text('Mirror left-right'),
+                  value: advancedSettings['flip_horizontal'] as bool,
+                  onChanged: (value) {
+                    final updatedSettings = Map<String, dynamic>.from(
+                      advancedSettings,
+                    );
+                    updatedSettings['flip_horizontal'] = value;
+                    onChanged(key, updatedSettings);
+                  },
+                ),
+              ),
+              Expanded(
+                child: SwitchListTile(
+                  title: const Text('Flip Vertical'),
+                  subtitle: const Text('Mirror up-down'),
+                  value: advancedSettings['flip_vertical'] as bool,
+                  onChanged: (value) {
+                    final updatedSettings = Map<String, dynamic>.from(
+                      advancedSettings,
+                    );
+                    updatedSettings['flip_vertical'] = value;
+                    onChanged(key, updatedSettings);
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          // Enhancement toggles
+          SwitchListTile(
+            title: const Text('Denoise'),
+            subtitle: const Text('Remove video noise'),
+            value: advancedSettings['denoise'] as bool,
+            onChanged: (value) {
+              final updatedSettings = Map<String, dynamic>.from(
+                advancedSettings,
+              );
+              updatedSettings['denoise'] = value;
+              onChanged(key, updatedSettings);
+            },
+          ),
+
+          // Speed control
+          Text(
+            'Speed Factor: ${(advancedSettings['speed_factor'] as double).toStringAsFixed(2)}x',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Slider(
+            value: advancedSettings['speed_factor'] as double,
+            min: 0.25,
+            max: 4.0,
+            divisions: 15,
+            onChanged: (value) {
+              final updatedSettings = Map<String, dynamic>.from(
+                advancedSettings,
+              );
+              updatedSettings['speed_factor'] = value;
+              onChanged(key, updatedSettings);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildOutputSettingsControl(
+    BuildContext context,
+    String key,
+    dynamic value,
+    Map<String, dynamic> hint,
+    Function onChanged,
+  ) {
+    final outputSettings = value as Map<String, dynamic>;
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outline.withAlpha(130)),
+        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.surface,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.output, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Output Settings',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          TextFormField(
+            initialValue: outputSettings['filename_prefix'] as String,
+            decoration: const InputDecoration(
+              labelText: 'Filename Prefix',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              final updatedSettings = Map<String, dynamic>.from(outputSettings);
+              updatedSettings['filename_prefix'] = value;
+              onChanged(key, updatedSettings);
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          Text(
+            'Processing Preset',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'fast', label: Text('Fast')),
+              ButtonSegment(value: 'balanced', label: Text('Balanced')),
+              ButtonSegment(value: 'quality', label: Text('Quality')),
+            ],
+            selected: {outputSettings['optimization_preset'] as String},
+            onSelectionChanged: (selection) {
+              final updatedSettings = Map<String, dynamic>.from(outputSettings);
+              updatedSettings['optimization_preset'] = selection.first;
+              onChanged(key, updatedSettings);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Stream<String>? executeStream(String input) async* {
+    try {
+      final inputSettings = settings['input_settings'] as Map<String, dynamic>;
+      final operationSettings =
+          settings['operation_settings'] as Map<String, dynamic>;
+      final outputSettings =
+          settings['output_settings'] as Map<String, dynamic>;
+      final audioSettings = settings['audio_settings'] as Map<String, dynamic>;
+
+      final selectedVideoPath = inputSettings['file_path'] as String?;
+      if (selectedVideoPath == null || selectedVideoPath.isEmpty) {
+        yield '❌ **Error**: No video file selected. Please use the file picker in settings.\n\n';
+        return;
+      }
+
+      final inputFile = File(selectedVideoPath);
+      if (!await inputFile.exists()) {
+        yield '❌ **Error**: Selected video file not found: `${inputFile.path}`\n\n';
+        return;
+      }
+
+      final operations = List<String>.from(
+        operationSettings['operations'] as List? ?? [],
+      );
+      if (operations.isEmpty) {
+        yield '❌ **Error**: No operations selected. Please choose at least one operation to perform.\n\n';
+        return;
+      }
+
+      final outputFormat = operationSettings['output_format'] as String;
+      final audioOutputFormat =
+          operationSettings['audio_output_format'] as String;
+
+      final outputFile = await _generateUniqueOutputFile(
+        '${outputSettings['filename_prefix'] as String}video',
+        outputFormat,
+      );
+
+      final audioOutputFile = await _generateUniqueOutputFile(
+        '${outputSettings['filename_prefix'] as String}audio',
+        audioOutputFormat,
+      );
+
+      yield '# 🎬 Advanced Video Processing\n\n';
+      yield '**Operations**: ${operations.map(_getOperationDisplayName).join(' → ')}\n';
+      yield '**Input**: `${path.basename(inputFile.path)}`\n';
+      yield '**Planned Output (Video)**: `${path.basename(outputFile.path)}`\n';
+      yield '**Planned Output (Audio)**: `${path.basename(audioOutputFile.path)}`\n';
+
+      // Show trimming info
+      final startTime = inputSettings['start_time'] as double? ?? 0.0;
+      final endTime = inputSettings['end_time'] as double?;
+      final videoDuration = inputSettings['video_duration'] as double? ?? 0.0;
+
+      if (startTime > 0 || (endTime != null && endTime < videoDuration)) {
+        yield '**Trimming**: ${_formatDuration(startTime)} to ${_formatDuration(endTime ?? videoDuration)}\n';
+      }
+
+      yield '\n---\n\n';
+      yield '## 🔄 Processing Pipeline...\n\n';
+
+      final args = _buildFFmpegArgs(inputFile, outputFile, audioOutputFile);
+
+      yield '**FFmpeg Command:**\n';
+      yield '```bash\n';
+      yield 'ffmpeg ${args.join(' ')}\n';
+      yield '```\n\n';
+
+      bool hasError = false;
+      String lastProgressLine = '';
+
+      await for (final line in FfmpegService.instance.runStream(args)) {
+        if (line.contains('[FFmpeg error:') ||
+            line.contains('[FFmpeg exception:')) {
+          hasError = true;
+          yield '❌ **Error**: $line\n';
+        } else if (line.contains('[FFmpeg finished successfully]')) {
+          yield '\n✅ **Processing pipeline completed!\n';
+        } else if (line.contains('[Cancelled]')) {
+          yield '\n⚠️ **Processing cancelled**\n';
+          return;
+        } else if (line.contains('frame=') && line.contains('time=')) {
+          final progressText = line.trim();
+          if (progressText != lastProgressLine) {
+            yield '📊 $progressText\n';
+            lastProgressLine = progressText;
+          }
+        }
+      }
+
+      yield '\n---\n\n';
+
+      // === VIDEO REPORT ===
+      final videoExists = await outputFile.exists();
+      if (!hasError && videoExists) {
+        final fileSize = await outputFile.length();
+        final fileSizeMB = (fileSize / (1024 * 1024)).toStringAsFixed(2);
+
+        yield '## ✅ Video Output\n\n';
+        yield '**File Size**: $fileSizeMB MB\n';
+        final fileUri = Uri.file(outputFile.path);
+        yield '**Location**: `$fileUri`\n';
+        yield '**Download Link**: [Click to open ${path.basename(outputFile.path)}]($fileUri)\n';
+
+        final folderUri = Uri.file(outputFile.parent.path);
+        yield '**Open Folder**: [Click to open containing folder]($folderUri)\n\n';
+
+        yield '### 📋 Summary:\n';
+        yield '- **Operations**: ${operations.map(_getOperationDisplayName).join(', ')}\n';
+        yield '- **Format**: ${outputFormat.toUpperCase()}\n';
+        yield '- **Final Size**: $fileSizeMB MB\n';
+
+        if (startTime > 0 || (endTime != null && endTime < videoDuration)) {
+          final trimmedDuration = (endTime ?? videoDuration) - startTime;
+          yield '- **Trimmed Duration**: ${_formatDuration(trimmedDuration)}\n';
+        }
+
+        yield '\n';
+        if (outputSettings['preview_enabled'] as bool &&
+            _isVideoFile(outputFile.path) &&
+            fileSize < 50 * 1024 * 1024) {
+          yield '💡 **Note**: Click the download link above to open the processed video in your default video player.\n\n';
+        }
+
+        yield _generateProcessingTips(operations, fileSize);
+      }
+
+      // === AUDIO REPORT ===
+      final audioExists = await audioOutputFile.exists();
+      if (!hasError && audioExists) {
+        final audioSize = await audioOutputFile.length();
+        final audioSizeMB = (audioSize / (1024 * 1024)).toStringAsFixed(2);
+
+        yield '\n## 🎵 Audio Output\n\n';
+        yield '**File Size**: $audioSizeMB MB\n';
+        final audioUri = Uri.file(audioOutputFile.path);
+        yield '**Location**: `$audioUri`\n';
+        yield '**Download Link**: [Click to open ${path.basename(audioOutputFile.path)}]($audioUri)\n';
+
+        final folderUri = Uri.file(audioOutputFile.parent.path);
+        yield '**Open Folder**: [Click to open containing folder]($folderUri)\n\n';
+
+        yield '### 📋 Audio Summary:\n';
+        yield '- **Format**: ${audioOutputFormat.toUpperCase()}\n';
+        yield '- **Bitrate**: ${audioSettings['audio_bitrate']} kbps\n';
+        yield '- **Sample Rate**: ${audioSettings['sample_rate']} Hz\n';
+
+        if (startTime > 0 || (endTime != null && endTime < videoDuration)) {
+          final trimmedDuration = (endTime ?? videoDuration) - startTime;
+          yield '- **Trimmed Duration**: ${_formatDuration(trimmedDuration)}\n';
+        }
+
+        yield '\n';
+      }
+
+      // === FALLBACK ERROR ===
+      if (!videoExists && !audioExists) {
+        yield '❌ **Failed**: No output file generated or processing failed.\n\n';
+        yield _generateTroubleshootingTips(operations);
+      }
+    } catch (e) {
+      yield '❌ **Error**: $e\n\n';
+    }
+  }
+
+  static String _getOperationDisplayName(String operation) {
+    switch (operation) {
+      case 'convert':
+        return 'Format Conversion';
+      case 'trim':
+        return 'Video Trimming';
+      case 'compress':
+        return 'Video Compression';
+      case 'extract_audio':
+        return 'Audio Extraction';
+      case 'rotate':
+        return 'Rotation/Flipping';
+      case 'enhance':
+        return 'Video Enhancement';
+      default:
+        return operation;
+    }
+  }
+
+  String _generateProcessingTips(List<String> operations, int fileSize) {
+    final buffer = StringBuffer();
+    final fileSizeMB = fileSize / (1024 * 1024);
+
+    buffer.write('💡 **Tips & Notes**:\n');
+
+    if (operations.contains('convert')) {
+      buffer.write('- Use MP4 for best compatibility across devices\n');
+      buffer.write('- WebM is ideal for web deployment\n');
+    }
+
+    if (operations.contains('compress')) {
+      buffer.write('- Achieved ${fileSizeMB.toStringAsFixed(1)}MB output\n');
+      buffer.write(
+        '- For smaller files, try lower resolution or higher CRF values\n',
+      );
+    }
+
+    if (operations.contains('extract_audio')) {
+      buffer.write('- Audio extracted to ${fileSizeMB.toStringAsFixed(1)}MB\n');
+      buffer.write('- Use FLAC for lossless audio, MP3 for compatibility\n');
+    }
+
+    if (operations.contains('trim')) {
+      buffer.write('- Trimming applied as specified in input settings\n');
+    }
+
+    if (operations.contains('rotate')) {
+      buffer.write('- Rotation/flipping applied without quality loss\n');
+    }
+
+    if (operations.contains('enhance')) {
+      buffer.write(
+        '- Enhancement effects applied - quality may vary by source\n',
+      );
+    }
+
+    if (operations.length > 1) {
+      buffer.write(
+        '- Multiple operations processed in sequence for optimal quality\n',
+      );
+    }
+
+    buffer.write('- Files auto-cleanup after 24 hours\n');
+    buffer.write('- Use "Open Folder" link to access the output directory\n');
+    buffer.write('- Click download link to open in your video player\n');
+
+    return buffer.toString();
+  }
+
+  String _generateTroubleshootingTips(List<String> operations) {
+    return '''### 🔧 Troubleshooting:
+- **Multiple Operations**: Complex pipelines may take longer or use more resources
+- **File Format**: Ensure input is a supported video format
+- **File Path**: Check that the file path doesn't contain special characters
+- **FFmpeg**: Verify FFmpeg is properly installed and accessible
+- **Disk Space**: Ensure sufficient disk space for output file
+- **Permissions**: Check file read/write permissions
+- **Settings**: Try simpler settings if complex operations fail
+
+**Common Solutions**:
+- Reduce number of operations for faster processing
+- Use "copy" codec for fastest processing when possible
+- Try MP4 format for best compatibility
+- Reduce resolution if processing fails
+- Check FFmpeg installation path in settings
+- Process operations one at a time if pipeline fails
+''';
+  }
+
+  @override
+  Future<ToolResult> execute(String input) async {
+    final buffer = StringBuffer();
+    await for (final line in executeStream(input) ?? const Stream.empty()) {
+      buffer.write(line);
+    }
+
+    final output = buffer.toString();
+    final isSuccess = output.contains('✅ Processing Complete!');
+
+    return ToolResult(output: output, status: isSuccess ? 'success' : 'error');
+  }
+}
+
 Map<String, List<Tool Function()>> getMiscTools() {
   return {
     'Image Tools': [
@@ -5727,6 +7857,7 @@ Map<String, List<Tool Function()>> getMiscTools() {
       () => NinePatchUITool(),
       () => CustomControlTestTool(),
       if (!kIsWeb) () => VideoToGifTool(),
+      if (!kIsWeb) () => VideoProcessorTool(),
     ],
   };
 }

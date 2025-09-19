@@ -442,7 +442,7 @@ Future<void> _exportScriptsAsZip(
     }
 
     // Encode archive to ZIP
-    final zipData = Uint8List.fromList(ZipEncoder().encode(archive)!);
+    final zipData = Uint8List.fromList(ZipEncoder().encode(archive));
 
     // Save the file
     await FileExporter.saveBinaryFile(zipData, 'scripts_library.zip');
@@ -764,7 +764,7 @@ class _AddEditScriptDialogState extends State<AddEditScriptDialog> {
               // Detected info
               if (_detectedName.isNotEmpty) ...[
                 Card(
-                  color: Theme.of(context).colorScheme.surfaceVariant,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: Row(

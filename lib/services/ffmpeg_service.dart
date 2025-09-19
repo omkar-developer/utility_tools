@@ -55,7 +55,7 @@ class FfmpegService {
           yield '[Cancelled]';
           break;
         }
-        yield line + '\n';
+        yield '$line\n';
       }
 
       final exitCode = await process.exitCode;

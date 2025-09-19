@@ -19,6 +19,8 @@ abstract class Tool {
   final bool supportsLiveUpdate; // Add this line
   final bool supportsStreaming; // Add this for streaming support
   final bool allowEmptyInput;
+  int executionProgress;
+  final bool showsProgress;
   Map<String, dynamic> settings;
   Map<String, dynamic>? settingsHints;
 
@@ -76,6 +78,8 @@ abstract class Tool {
     this.supportsStreaming = false, // Default false for existing tools
     this.allowEmptyInput = false,
     this.settingsHints,
+    this.executionProgress = 0,
+    this.showsProgress = false,
   });
 }
 
